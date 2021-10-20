@@ -20,79 +20,88 @@ defmodule Endo.QueryTest do
   describe "select/3" do
     test "single fixed field" do
       query = %Query{} |> select([q], q["bar"])
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) ==  [
         {:field, [{:bind, 0}, "bar"]}
-      ]} = query
+      ]
     end
 
     test "single dynamic field" do
       f = fn -> "bar" end
       query = %Query{} |> select([q], q[^f.()])
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {:field, [{:bind, 0}, {:unsafe, "bar"}]}
-      ]} = query
+      ]
     end
 
     test "multiple fields" do
       f = fn -> "qux" end
       query = %Query{} |> select([q], [q["bar"], q[^f.()]])
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {:field, [{:bind, 0}, "bar"]},
         {:field, [{:bind, 0}, {:unsafe, "qux"}]}
-      ]} = query
+      ]
     end
 
     test "multiple bindings" do
       query = %Query{} |> select([p, q], [p["foo"], q["bar"]])
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {:field, [{:bind, 0}, "foo"]},
         {:field, [{:bind, 1}, "bar"]}
-      ]} = query
+      ]
     end
 
     test "multiple bindings with ..." do
       query = %Query{} |> select([p, ..., q], [p["foo"], q["bar"]])
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {:field, [{:bind, 0}, "foo"]},
         {:field, [{:bind, -1}, "bar"]}
-      ]} = query
+      ]
     end
 
     test "binary operator" do
       query = %Query{} |> select([p], p["foo"] + p["bar"])
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {{:non_agg, :+}, [
           {:field, [{:bind, 0}, "foo"]},
           {:field, [{:bind, 0}, "bar"]}
         ]}
-      ]} = query
+      ]
     end
 
     test "binary operator with literal on one side" do
       query = %Query{} |> select([p], p["foo"] + 123)
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {{:non_agg, :+}, [
           {:field, [{:bind, 0}, "foo"]},
           123
         ]}
-      ]} = query
+      ]
     end
 
     test "binary operator with literal on one side and aggregation on the other" do
       query = %Query{} |> select([p], avg(p["foo"]) * 123)
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {{:agg, :*}, [
           {{:agg, :avg}, [
             {:field, [{:bind, 0}, "foo"]}
           ]},
           123
         ]}
-      ]} = query
+      ]
     end
 
     test "binary operator with aggregation on both sides" do
       query = %Query{} |> select([p], sum(p["foo"]) - avg(p["bar"]))
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {{:agg, :-}, [
           {{:agg, :sum}, [
             {:field, [{:bind, 0}, "foo"]}
@@ -101,7 +110,7 @@ defmodule Endo.QueryTest do
             {:field, [{:bind, 0}, "bar"]}
           ]},
         ]}
-      ]} = query
+      ]
     end
 
     test "binary operator with aggregation on one side and non-aggregation non-literal expression on the other" do
@@ -113,23 +122,25 @@ defmodule Endo.QueryTest do
 
     test "aggregation on a field" do
       query = %Query{} |> select([p], sum(p["foo"]))
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {{:agg, :sum}, [
           {:field, [{:bind, 0}, "foo"]}
         ]}
-      ]} = query
+      ]
     end
 
     test "aggregation on calculation" do
       query = %Query{} |> select([p], sum(p["foo"] + p["bar"]))
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {{:agg, :sum}, [
           {{:non_agg, :+}, [
             {:field, [{:bind, 0}, "foo"]},
             {:field, [{:bind, 0}, "bar"]}
           ]}
         ]}
-      ]} = query
+      ]
     end
 
     test "aggregation on aggregation" do
@@ -141,12 +152,13 @@ defmodule Endo.QueryTest do
 
     test "aggregation with extra args" do
       query = %Query{} |> select([p], percentile_cont(0.95, p["foo"]))
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {{:agg, :percentile_cont}, [
           0.95,
           {:field, [{:bind, 0}, "foo"]}
         ]}
-      ]} = query
+      ]
     end
 
     test "aggregation with wrong number of args" do
@@ -161,11 +173,12 @@ defmodule Endo.QueryTest do
               |> select([q], q["foo"])
               |> select([r], [r["bar"], r["baz"]])
 
-      assert %Query{select: [
+      assert %Query{select: select} = query
+      assert List.flatten(select) == [
         {:field, [{:bind, 0}, "foo"]},
         {:field, [{:bind, 0}, "bar"]},
         {:field, [{:bind, 0}, "baz"]}
-      ]} = query
+      ]
     end
   end
 
@@ -229,6 +242,152 @@ defmodule Endo.QueryTest do
         import Endo.Query
         %Endo.Query{} |> order_by([q], sum(q["foo"]))
       end
+    end
+  end
+
+  describe "limit/2" do
+    test "literal" do
+      query = %Query{} |> limit(10)
+      assert %Query{limit: 10} = query
+    end
+
+    test "pinned expression" do
+      f = fn -> 10 end
+      query = %Query{} |> limit(^f.())
+      assert %Query{limit: {:unsafe, 10}} = query
+    end
+  end
+
+  describe "offset/2" do
+    test "literal" do
+      query = %Query{} |> offset(10)
+      assert %Query{offset: 10} = query
+    end
+
+    test "pinned expression" do
+      f = fn -> 10 end
+      query = %Query{} |> offset(^f.())
+      assert %Query{offset: {:unsafe, 10}} = query
+    end
+  end
+
+  describe "group_by/3" do
+    test "non-aggregate" do
+      query = %Query{} |> group_by([q], q["foo"] + q["bar"])
+      assert %Query{group_by: [{{:non_agg, :+}, [
+        {:field, [{:bind, 0}, "foo"]},
+        {:field, [{:bind, 0}, "bar"]}
+      ]}]} = query
+    end
+
+    test "aggregate" do
+      assert_compile_time_raise ArgumentError, "Aggregations must not appear in group_by.", fn ->
+        import Endo.Query
+        %Endo.Query{} |> group_by([q], percentile_cont(0.95, q["foo"]))
+      end
+    end
+
+    test "multiple expressions" do
+      query = %Query{} |> group_by([q], [q["foo"], q["bar"]])
+      assert %Query{group_by: [
+        {:field, [{:bind, 0}, "foo"]},
+        {:field, [{:bind, 0}, "bar"]}
+      ]} = query
+    end
+  end
+
+  describe "having/3" do
+    test "aggregate" do
+      query = %Query{} |> having([q], count_distinct(q["foo"]) >= 123)
+      assert %Query{having: {{:agg, :>=}, [
+        {{:agg, :count_distinct}, [
+          {:field, [{:bind, 0}, "foo"]}
+        ]},
+        123
+      ]}} = query
+    end
+
+    test "non-aggregate" do
+      assert_compile_time_raise ArgumentError, "Only an aggregation expression is allowed in having clause.", fn ->
+        import Endo.Query
+        %Endo.Query{} |> having([q], q["foo"] > q["bar"])
+      end
+    end
+  end
+
+  describe "join/5" do
+    test "join 1 table" do
+      query = %Query{from: "table1"}
+              |> join(:inner, [p], q in "table2", on: p["foo"] == q["bar"])
+      assert %Query{
+        from: "table1",
+        join: join
+      } = query
+
+      assert List.flatten(join) == [
+        {:inner, {
+          "table2",
+          {{:non_agg, :==}, [
+            {:field, [{:bind, 0}, "foo"]},
+            {:field, [{:bind, 1}, "bar"]}
+          ]}
+        }}
+      ]
+    end
+
+    test "join multiple tables" do
+      query = %Query{from: "table1"}
+              |> join(:inner, [p], q in "table2", on: p["foo"] == q["bar"])
+              |> join(:left, [p, ...], r in "table3", on: p["baz"] == r["qux"])
+              |> join(:right, [..., x], y in "table4", on: x["xxx"] == y["yyy"])
+      assert %Query{
+        from: "table1",
+        join: join
+      } = query
+
+      assert List.flatten(join) == [
+        {:inner, {
+          "table2",
+          {{:non_agg, :==}, [
+            {:field, [{:bind, 0}, "foo"]},
+            {:field, [{:bind, 1}, "bar"]}
+          ]}
+        }},
+        {:left, {
+          "table3",
+          {{:non_agg, :==}, [
+            {:field, [{:bind, 0}, "baz"]},
+            {:field, [{:bind, -1}, "qux"]}
+          ]}
+        }},
+        {:right, {
+          "table4",
+          {{:non_agg, :==}, [
+            {:field, [{:bind, -2}, "xxx"]},
+            {:field, [{:bind, -1}, "yyy"]}
+          ]}
+        }}
+      ]
+    end
+
+    test "join a query" do
+      query1 = %Query{}
+      query2 = %Query{}
+               |> join(:inner, [p], q in ^query1, on: p["foo"] == q["bar"])
+
+      assert %Query{
+        join: join
+      } = query2
+
+      assert List.flatten(join) == [
+        {:inner, {
+          {:unsafe, %Query{}},
+          {{:non_agg, :==}, [
+            {:field, [{:bind, 0}, "foo"]},
+            {:field, [{:bind, 1}, "bar"]}
+          ]}
+        }}
+      ]
     end
   end
 end

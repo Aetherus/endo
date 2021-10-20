@@ -5,7 +5,10 @@ defmodule Endo.Query do
     where: nil,
     order_by: nil,
     limit: nil,
-    offset: nil
+    offset: nil,
+    group_by: nil,
+    having: nil,
+    join: []
   ]
 
   @doc """
@@ -65,8 +68,8 @@ defmodule Endo.Query do
       |> List.wrap()
       |> Enum.map(&resolve_bind(&1, binds_with_index))
 
-    quote do
-      %{unquote(query) | select: unquote(query).select ++ unquote(selections)}
+    quote bind_quoted: [query: query, selections: selections] do
+      %{query | select: [query.select, selections]}
     end
   end
 
@@ -134,6 +137,7 @@ defmodule Endo.Query do
 
   """
   defmacro limit(query, expr) do
+    expr = resolve_bind(expr, [])
     quote bind_quoted: [query: query, expr: expr] do
       %{query | limit: expr}
     end
@@ -146,8 +150,45 @@ defmodule Endo.Query do
 
   """
   defmacro offset(query, expr) do
+    expr = resolve_bind(expr, [])
     quote bind_quoted: [query: query, expr: expr] do
       %{query | offset: expr}
+    end
+  end
+
+  @doc """
+  # Example
+
+      from("my_table")
+      |> select([q], [q["foo"], q["bar"], sum(q["qux"])])
+      |> group_by([q], [ q["foo"], q["bar"] ])
+
+  """
+  defmacro group_by(query, binds, exprs) do
+    binds_with_index = index_binds(binds)
+    exprs = exprs
+            |> List.wrap()
+            |> Enum.map(&resolve_bind(&1, binds_with_index))
+
+    if has_aggregation?(exprs) do
+      raise ArgumentError, "Aggregations must not appear in group_by."
+    end
+
+    quote bind_quoted: [query: query, exprs: exprs] do
+      %{query | group_by: exprs}
+    end
+  end
+
+  defmacro having(query, binds, expr) do
+    binds_with_index = index_binds(binds)
+    expr = resolve_bind(expr, binds_with_index)
+
+    unless aggregation?(expr) do
+      raise ArgumentError, "Only an aggregation expression is allowed in having clause."
+    end
+
+    quote bind_quoted: [query: query, expr: expr] do
+      %{query | having: expr}
     end
   end
 
@@ -157,8 +198,13 @@ defmodule Endo.Query do
       from("table1")
       |> join(:inner, [p, ...], q in "table2", on: p["foo"] == q["bar"])
   """
-  defmacro join(query, qual, parent_binds, {:in, _, [child_bind, other_table]}, on: expr) do
-
+  defmacro join(query, qual, parent_binds, {:in, _, [child_bind, subquery]}, on: expr) do
+    binds_with_index = index_binds(parent_binds ++ [child_bind])
+    expr = resolve_bind(expr, binds_with_index)
+    subquery = resolve_bind(subquery, [])
+    quote bind_quoted: [query: query, expr: expr, qual: qual, subquery: subquery] do
+      %{query | join: [query.join, {qual, {subquery, expr}}]}
+    end
   end
 
   defp index_binds(binds) do
@@ -211,7 +257,7 @@ defmodule Endo.Query do
     min: 1,
     max: 1,
     count: 1,
-    countd: 1,
+    count_distinct: 1,
     stddev_samp: 1,
     stddev_pop: 1,
     var_samp: 1,

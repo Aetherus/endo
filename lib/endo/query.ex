@@ -1,7 +1,8 @@
 defmodule Endo.Query do
   defstruct [
     from: nil,
-    select: []
+    select: [],
+    where: nil
   ]
 
   @doc """
@@ -54,6 +55,44 @@ defmodule Endo.Query do
     #    or {:agg, _, [String.t(), expr*]}  (none of the sub exprs should be an aggregation)
     #    or {:fragment, _, [String.t(), expr*]}
 
+    binds_with_index = index_binds(binds)
+
+    selections =
+      selections
+      |> List.wrap()
+      |> Enum.map(&resolve_bind(&1, binds_with_index))
+
+    quote do
+      %{unquote(query) | select: unquote(query).select ++ unquote(selections)}
+    end
+  end
+
+  @doc """
+  # Example
+
+      from("my_table") |> where([q], q["foo"] > 123)
+
+  """
+  defmacro where(query, binds, condition) do
+    binds_with_index = index_binds(binds)
+    condition = resolve_bind(condition, binds_with_index)
+
+    if match?({{:agg, _}, _}, condition) do
+      raise ArgumentError, "Where condition must not contain aggregation."
+    end
+
+    quote bind_quoted: [query: query, condition: condition] do
+      combined_condition =
+        case query.where do
+          nil -> condition
+          existing_condition -> {{:arith, :and}, [existing_condition, condition]}
+        end
+
+      %{query | where: combined_condition}
+    end
+  end
+
+  defp index_binds(binds) do
     {leading, trailing} = Enum.split_while(binds, &!match?({:..., _, _}, &1))
 
     leading =
@@ -67,16 +106,7 @@ defmodule Endo.Query do
       |> Enum.with_index(fn ast, i -> {ast, -i - 1} end)
       |> Map.new()
 
-    binds_with_index = Map.merge(leading, trailing)
-
-    selections =
-      selections
-      |> List.wrap()
-      |> Enum.map(&resolve_bind(&1, binds_with_index))
-
-    quote do
-      %{unquote(query) | select: unquote(query).select ++ unquote(selections)}
-    end
+    Map.merge(leading, trailing)
   end
 
   defguardp is_literal(x)
@@ -102,23 +132,23 @@ defmodule Endo.Query do
     _,
     [bind, things_inside_brackets]
   }, binds_with_index) do
-    {{:bind, get_bind_index!(binds_with_index, bind)}, resolve_bind(things_inside_brackets, binds_with_index)}
+    {:field, [
+      {:bind, get_bind_index!(binds_with_index, bind)},
+      resolve_bind(things_inside_brackets, binds_with_index)
+    ]}
   end
 
-  @binary_operators ~w[
+  @operators ~w[
     + - * /
     < <= > >=
-    == !=
-    and or
+    == != =~
+    and or not in
   ]a
 
   # q["foo"] + q["bar"]
-  defp resolve_bind({operator, _, children}, binds_with_index) when operator in @binary_operators do
+  defp resolve_bind({operator, _, children}, binds_with_index) when operator in @operators do
     children = Enum.map(children, &resolve_bind(&1, binds_with_index))
-    if Enum.any?(children, &match?({{:agg, _}, _}, &1)) do
-      if Enum.any?(children, &match?({{type, _}, _} when type != :agg, &1)) do
-        raise ArgumentError, "Can't mix aggregation and non-aggregation in one formula."
-      end
+    if aggregation?(children) do
       {{:agg, operator}, children}
     else
       {{:arith, operator}, children}
@@ -153,10 +183,37 @@ defmodule Endo.Query do
     {{:agg, fun}, children}
   end
 
+  @non_aggregations [
+    like: 2,
+    ilike: 2,
+    is_nil: 1
+  ]
+
+  @non_aggregation_names Keyword.keys(@non_aggregations)
+
+  defp resolve_bind({fun, _, children}, binds_with_index) when fun in @non_aggregation_names do
+    if length(children) != @non_aggregations[fun] do
+      raise ArgumentError, "#{fun} takes #{@non_aggregations[fun]} argument(s) but #{length(children)} is given."
+    end
+    children = Enum.map(children, &resolve_bind(&1, binds_with_index))
+    {{:non_agg, fun}, children}
+  end
+
   defp get_bind_index!(binds_with_index, bind) do
     case binds_with_index[bind] do
       nil -> raise ArgumentError, "Binding #{elem(bind, 0)} is not defined"
       index -> index
+    end
+  end
+
+  defp aggregation?(nodes) do
+    if Enum.any?(nodes, &match?({{:agg, _}, _}, &1)) do
+      if Enum.any?(nodes, &match?({{type, _}, _} when type != :agg, &1)) do
+        raise ArgumentError, "Can't mix aggregation and non-aggregation in one formula."
+      end
+      true
+    else
+      false
     end
   end
 end

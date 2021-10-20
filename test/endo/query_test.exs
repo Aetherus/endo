@@ -209,10 +209,17 @@ defmodule Endo.QueryTest do
 
   describe "order_by/3" do
     test "non-aggregation" do
-      query = %Query{} |> order_by([q], q["foo"])
+      f = "qux"
+      query = %Query{} |> order_by([q], [q["foo"], asc: q["bar"], desc: q["baz"], asc: q[^f] + q["xxx"]])
       assert %Query{
         order_by: [
-          {:field, [{:bind, 0}, "foo"]}
+          asc: {:field, [{:bind, 0}, "foo"]},
+          asc: {:field, [{:bind, 0}, "bar"]},
+          desc: {:field, [{:bind, 0}, "baz"]},
+          asc: {{:arith, :+}, [
+            {:field, [{:bind, 0}, "qux"]},
+            {:field, [{:bind, 0}, "xxx"]}
+          ]}
         ]
       } = query
     end

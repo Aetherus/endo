@@ -3,7 +3,9 @@ defmodule Endo.Query do
     from: nil,
     select: [],
     where: nil,
-    order_by: nil
+    order_by: nil,
+    limit: nil,
+    offset: nil
   ]
 
   @doc """
@@ -97,14 +99,36 @@ defmodule Endo.Query do
     binds_with_index = index_binds(binds)
     exprs = exprs
             |> List.wrap()
-            |> Enum.map(&resolve_bind(&1, binds_with_index))
+            |> Enum.map(&build_order(&1, binds_with_index))
 
-    if has_aggregation?(exprs) do
+    if exprs |> Enum.map(&elem(&1, 1)) |> has_aggregation?() do
       raise ArgumentError, "Aggregations are not allowed in order_by."
     end
 
     quote bind_quoted: [query: query, exprs: exprs] do
       %{query | order_by: exprs}
+    end
+  end
+
+  defp build_order({direction, expr}, binds_with_index) when direction in [:asc, :desc] do
+    expr = resolve_bind(expr, binds_with_index)
+    {direction, expr}
+  end
+
+  defp build_order(expr, binds_with_index) do
+    expr = resolve_bind(expr, binds_with_index)
+    {:asc, expr}
+  end
+
+  defmacro limit(query, expr) do
+    quote bind_quoted: [query: query, expr: expr] do
+      %{query | limit: expr}
+    end
+  end
+
+  defmacro offset(query, expr) do
+    quote bind_quoted: [query: query, expr: expr] do
+      %{query | offset: expr}
     end
   end
 
@@ -137,9 +161,7 @@ defmodule Endo.Query do
 
   # ^expr
   defp resolve_bind({:^, _, [child]}, _binds_with_index) do
-    quote do
-      unquote(child)
-    end
+    child
   end
 
   # q[something]
@@ -164,10 +186,13 @@ defmodule Endo.Query do
   # q["foo"] + q["bar"]
   defp resolve_bind({operator, _, children}, binds_with_index) when operator in @operators do
     children = Enum.map(children, &resolve_bind(&1, binds_with_index))
-    if aggregation?(children) do
-      {{:agg, operator}, children}
-    else
-      {{:arith, operator}, children}
+    cond do
+      static_and_aggregations_only?(children) ->
+        {{:agg, operator}, children}
+      has_aggregation?(children) ->
+        raise ArgumentError, "Can't mix aggregation and non-aggregation in one formula."
+      true ->
+        {{:arith, operator}, children}
     end
   end
 
@@ -193,7 +218,7 @@ defmodule Endo.Query do
       raise ArgumentError, "#{fun} takes #{@aggregations[fun]} argument(s) but #{length(children)} is given."
     end
     children = Enum.map(children, &resolve_bind(&1, binds_with_index))
-    if Enum.any?(children, &match?({{:agg, _}, _}, &1)) do
+    if has_aggregation?(children) do
       raise ArgumentError, "Can't apply aggregation on aggregation."
     end
     {{:agg, fun}, children}
@@ -222,18 +247,25 @@ defmodule Endo.Query do
     end
   end
 
-  defp aggregation?(nodes) do
-    if Enum.any?(nodes, &match?({{:agg, _}, _}, &1)) do
-      if Enum.any?(nodes, &match?({{type, _}, _} when type != :agg, &1)) do
-        raise ArgumentError, "Can't mix aggregation and non-aggregation in one formula."
-      end
-      true
-    else
-      false
-    end
+  defp aggregation?(node) do
+    match?({{:agg, _}, _}, node)
+  end
+
+  defp literal?(node) when is_literal(node), do: true
+  defp literal?(_node), do: false
+
+  defp static_and_aggregations_only?(nodes) do
+    Enum.all?(nodes, & static?(&1) or aggregation?(&1))
   end
 
   defp has_aggregation?(nodes) do
-    Enum.any?(nodes, &match?({{:agg, _}, _}, &1))
+    Enum.any?(nodes, &aggregation?/1)
+  end
+
+  defp pinned_expression?({:^, _, [_]}), do: true
+  defp pinned_expression?(_), do: false
+
+  defp static?(expression) do
+    literal?(expression) or pinned_expression?(expression)
   end
 end

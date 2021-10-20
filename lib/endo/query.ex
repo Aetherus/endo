@@ -2,7 +2,8 @@ defmodule Endo.Query do
   defstruct [
     from: nil,
     select: [],
-    where: nil
+    where: nil,
+    order_by: nil
   ]
 
   @doc """
@@ -89,6 +90,21 @@ defmodule Endo.Query do
         end
 
       %{query | where: combined_condition}
+    end
+  end
+
+  defmacro order_by(query, binds, exprs) do
+    binds_with_index = index_binds(binds)
+    exprs = exprs
+            |> List.wrap()
+            |> Enum.map(&resolve_bind(&1, binds_with_index))
+
+    if has_aggregation?(exprs) do
+      raise ArgumentError, "Aggregations are not allowed in order_by."
+    end
+
+    quote bind_quoted: [query: query, exprs: exprs] do
+      %{query | order_by: exprs}
     end
   end
 
@@ -215,5 +231,9 @@ defmodule Endo.Query do
     else
       false
     end
+  end
+
+  defp has_aggregation?(nodes) do
+    Enum.any?(nodes, &match?({{:agg, _}, _}, &1))
   end
 end

@@ -206,4 +206,22 @@ defmodule Endo.QueryTest do
       }} = query
     end
   end
+
+  describe "order_by/3" do
+    test "non-aggregation" do
+      query = %Query{} |> order_by([q], q["foo"])
+      assert %Query{
+        order_by: [
+          {:field, [{:bind, 0}, "foo"]}
+        ]
+      } = query
+    end
+
+    test "aggregation" do
+      assert_compile_time_raise ArgumentError, "Aggregations are not allowed in order_by.", fn ->
+        import Endo.Query
+        %Endo.Query{} |> order_by([q], sum(q["foo"]))
+      end
+    end
+  end
 end

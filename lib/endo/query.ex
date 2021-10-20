@@ -10,10 +10,12 @@ defmodule Endo.Query do
       from("my_table")
 
   """
-  def from(table) do
-    %Endo.Query{
-      from: table
-    }
+  defmacro from(table) do
+    quote do
+      %Endo.Query{
+        from: unquote(table)
+      }
+    end
   end
 
   @doc """

@@ -61,7 +61,7 @@ defmodule Endo.QueryTest do
     test "binary operator" do
       query = %Query{} |> select([p], p["foo"] + p["bar"])
       assert %Query{select: [
-        {{:arith, :+}, [
+        {{:non_agg, :+}, [
           {:field, [{:bind, 0}, "foo"]},
           {:field, [{:bind, 0}, "bar"]}
         ]}
@@ -71,7 +71,7 @@ defmodule Endo.QueryTest do
     test "binary operator with literal on one side" do
       query = %Query{} |> select([p], p["foo"] + 123)
       assert %Query{select: [
-        {{:arith, :+}, [
+        {{:non_agg, :+}, [
           {:field, [{:bind, 0}, "foo"]},
           123
         ]}
@@ -124,7 +124,7 @@ defmodule Endo.QueryTest do
       query = %Query{} |> select([p], sum(p["foo"] + p["bar"]))
       assert %Query{select: [
         {{:agg, :sum}, [
-          {{:arith, :+}, [
+          {{:non_agg, :+}, [
             {:field, [{:bind, 0}, "foo"]},
             {:field, [{:bind, 0}, "bar"]}
           ]}
@@ -173,7 +173,7 @@ defmodule Endo.QueryTest do
     test "happy case" do
       query = %Query{} |> where([q], q["foo"] > 10)
       assert %Query{
-        where: {{:arith, :>}, [
+        where: {{:non_agg, :>}, [
           {:field, [{:bind, 0}, "foo"]},
           10
         ]}
@@ -193,12 +193,12 @@ defmodule Endo.QueryTest do
               |> where([r], r["bar"] <= 100)
 
       assert %Query{
-        where: {{:arith, :and}, [
-          {{:arith, :>}, [
+        where: {{:non_agg, :and}, [
+          {{:non_agg, :>}, [
             {:field, [{:bind, 0}, "foo"]},
             10
           ]},
-          {{:arith, :<=}, [
+          {{:non_agg, :<=}, [
             {:field, [{:bind, 0}, "bar"]},
             100
           ]}
@@ -216,7 +216,7 @@ defmodule Endo.QueryTest do
           asc: {:field, [{:bind, 0}, "foo"]},
           asc: {:field, [{:bind, 0}, "bar"]},
           desc: {:field, [{:bind, 0}, "baz"]},
-          asc: {{:arith, :+}, [
+          asc: {{:non_agg, :+}, [
             {:field, [{:bind, 0}, "qux"]},
             {:field, [{:bind, 0}, "xxx"]}
           ]}

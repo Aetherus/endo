@@ -80,7 +80,7 @@ defmodule Endo.Query do
     binds_with_index = index_binds(binds)
     condition = resolve_bind(condition, binds_with_index)
 
-    if match?({{:agg, _}, _}, condition) do
+    if aggregation?(condition) do
       raise ArgumentError, "Where condition must not contain aggregation."
     end
 
@@ -88,7 +88,7 @@ defmodule Endo.Query do
       combined_condition =
         case query.where do
           nil -> condition
-          existing_condition -> {{:arith, :and}, [existing_condition, condition]}
+          existing_condition -> {{:non_agg, :and}, [existing_condition, condition]}
         end
 
       %{query | where: combined_condition}
@@ -176,26 +176,6 @@ defmodule Endo.Query do
     ]}
   end
 
-  @operators ~w[
-    + - * /
-    < <= > >=
-    == != =~
-    and or not in
-  ]a
-
-  # q["foo"] + q["bar"]
-  defp resolve_bind({operator, _, children}, binds_with_index) when operator in @operators do
-    children = Enum.map(children, &resolve_bind(&1, binds_with_index))
-    cond do
-      static_and_aggregations_only?(children) ->
-        {{:agg, operator}, children}
-      has_aggregation?(children) ->
-        raise ArgumentError, "Can't mix aggregation and non-aggregation in one formula."
-      true ->
-        {{:arith, operator}, children}
-    end
-  end
-
   @aggregations [
     sum: 1,
     avg: 1,
@@ -227,7 +207,22 @@ defmodule Endo.Query do
   @non_aggregations [
     like: 2,
     ilike: 2,
-    is_nil: 1
+    is_nil: 1,
+    "+": 2,
+    "-": 2,
+    "*": 2,
+    "/": 2,
+    "==": 2,
+    "!=": 2,
+    "<": 2,
+    "<=": 2,
+    ">": 2,
+    ">=": 2,
+    "=~": 2,
+    in: 2,
+    and: 2,
+    or: 2,
+    not: 1
   ]
 
   @non_aggregation_names Keyword.keys(@non_aggregations)
@@ -237,7 +232,14 @@ defmodule Endo.Query do
       raise ArgumentError, "#{fun} takes #{@non_aggregations[fun]} argument(s) but #{length(children)} is given."
     end
     children = Enum.map(children, &resolve_bind(&1, binds_with_index))
-    {{:non_agg, fun}, children}
+    cond do
+      static_and_aggregations_only?(children) ->
+        {{:agg, fun}, children}
+      has_aggregation?(children) ->
+        raise ArgumentError, "Can't mix aggregation and non-aggregation in one formula."
+      true ->
+        {{:non_agg, fun}, children}
+    end
   end
 
   defp get_bind_index!(binds_with_index, bind) do

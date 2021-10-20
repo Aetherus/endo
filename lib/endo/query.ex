@@ -95,6 +95,12 @@ defmodule Endo.Query do
     end
   end
 
+  @doc """
+  # Example
+
+      from("my_table") |> order_by([q], asc: q["foo"], desc: q["bar"])
+
+  """
   defmacro order_by(query, binds, exprs) do
     binds_with_index = index_binds(binds)
     exprs = exprs
@@ -120,16 +126,39 @@ defmodule Endo.Query do
     {:asc, expr}
   end
 
+
+  @doc """
+  # Example
+
+      from("my_table") |> limit(10)
+
+  """
   defmacro limit(query, expr) do
     quote bind_quoted: [query: query, expr: expr] do
       %{query | limit: expr}
     end
   end
 
+  @doc """
+  # Example
+
+      from("my_table") |> offset(10)
+
+  """
   defmacro offset(query, expr) do
     quote bind_quoted: [query: query, expr: expr] do
       %{query | offset: expr}
     end
+  end
+
+  @doc """
+  # Example
+
+      from("table1")
+      |> join(:inner, [p, ...], q in "table2", on: p["foo"] == q["bar"])
+  """
+  defmacro join(query, qual, parent_binds, {:in, _, [child_bind, other_table]}, on: expr) do
+
   end
 
   defp index_binds(binds) do
@@ -161,7 +190,7 @@ defmodule Endo.Query do
 
   # ^expr
   defp resolve_bind({:^, _, [child]}, _binds_with_index) do
-    child
+    {:unsafe, child}
   end
 
   # q[something]

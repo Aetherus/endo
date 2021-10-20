@@ -29,7 +29,7 @@ defmodule Endo.QueryTest do
       f = fn -> "bar" end
       query = %Query{} |> select([q], q[^f.()])
       assert %Query{select: [
-        {:field, [{:bind, 0}, "bar"]}
+        {:field, [{:bind, 0}, {:unsafe, "bar"}]}
       ]} = query
     end
 
@@ -38,7 +38,7 @@ defmodule Endo.QueryTest do
       query = %Query{} |> select([q], [q["bar"], q[^f.()]])
       assert %Query{select: [
         {:field, [{:bind, 0}, "bar"]},
-        {:field, [{:bind, 0}, "qux"]}
+        {:field, [{:bind, 0}, {:unsafe, "qux"}]}
       ]} = query
     end
 
@@ -217,7 +217,7 @@ defmodule Endo.QueryTest do
           asc: {:field, [{:bind, 0}, "bar"]},
           desc: {:field, [{:bind, 0}, "baz"]},
           asc: {{:non_agg, :+}, [
-            {:field, [{:bind, 0}, "qux"]},
+            {:field, [{:bind, 0}, {:unsafe, "qux"}]},
             {:field, [{:bind, 0}, "xxx"]}
           ]}
         ]

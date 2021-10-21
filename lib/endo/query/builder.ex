@@ -13,7 +13,7 @@ defmodule Endo.Query.Builder do
 
     - `:schema` the PostgreSQL schema that the query will run on.
   """
-  def build_sql(%Query{} = query, opts) do
+  def build_sql({_, %Query{} = query}, opts) do
     do_build_sql(query, "t", true, [], opts)
   end
 
@@ -39,8 +39,12 @@ defmodule Endo.Query.Builder do
     {limit_clause, args} = build_limit_clause(query.limit, schema, alias_prefix, args, opts)
     {offset_clause, args} = build_offset_clause(query.offset, schema, alias_prefix, args, opts)
 
-    args = if is_root, do: Enum.reverse(args), else: args
-    args = Enum.map(args, &elem(&1, 1))
+    args =
+      if is_root do
+        args |> Enum.reverse() |> Enum.map(&elem(&1, 1))
+      else
+        args
+      end
 
     sql = [
       select_clause,
@@ -92,7 +96,7 @@ defmodule Endo.Query.Builder do
     {snippet, args}
   end
 
-  defp build_join_clause({qual, {%Query{} = subquery, on}}, _schema, alias_prefix, i, args, opts) do
+  defp build_join_clause({qual, {{:unsafe, {_, %Query{} = subquery}}, on}}, _schema, alias_prefix, i, args, opts) do
     qual = qual |> to_string() |> String.upcase()
     {subquery, args} = do_build_sql(subquery, "s#{alias_prefix}", false, args, opts)
     {on, args} = build_formula(on, alias_prefix, args)

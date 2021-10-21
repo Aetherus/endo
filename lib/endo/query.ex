@@ -1,4 +1,5 @@
 defmodule Endo.Query do
+  @opaque t :: %__MODULE__{}
   defstruct [
     from: nil,
     select: [],
@@ -11,6 +12,13 @@ defmodule Endo.Query do
     join: [],
     tables_count: 0  # from +1, every join +1, subquery starts from 0
   ]
+
+  defdelegate to_sql(query, opts \\ []), to: Endo.Query.Builder, as: :build_sql
+
+  defguardp is_literal(x)
+    when is_number(x)
+    or is_binary(x)
+    or is_boolean(x)
 
   @doc """
   # Example
@@ -228,11 +236,6 @@ defmodule Endo.Query do
     Map.merge(leading, trailing)
   end
 
-  defguardp is_literal(x)
-    when is_number(x)
-    or is_binary(x)
-    or is_boolean(x)
-
   # literals
   defp resolve_bind(literal, _binds_with_index, _tables_count) when is_literal(literal) do
     literal
@@ -266,7 +269,8 @@ defmodule Endo.Query do
     stddev_pop: 1,
     var_samp: 1,
     var_pop: 1,
-    percentile_cont: 2
+    percentile_cont: 2,
+    median: 1
   ]
 
   @aggregation_names Keyword.keys(@aggregations)
@@ -298,6 +302,7 @@ defmodule Endo.Query do
     ">": 2,
     ">=": 2,
     "=~": 2,
+    "<>": 2,  # String concatenation
     in: 2,
     and: 2,
     or: 2,
@@ -337,6 +342,8 @@ defmodule Endo.Query do
   defp literal?(_node), do: false
 
   defp static_and_aggregations_only?(nodes) do
+    IO.puts("============")
+    IO.inspect(nodes)
     Enum.all?(nodes, & static?(&1) or aggregation?(&1))
   end
 
@@ -345,6 +352,7 @@ defmodule Endo.Query do
   end
 
   defp pinned_expression?({:^, _, [_]}), do: true
+  defp pinned_expression?({:unsafe, _}), do: true
   defp pinned_expression?(_), do: false
 
   defp static?(expression) do

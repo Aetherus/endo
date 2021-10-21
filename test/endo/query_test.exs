@@ -7,19 +7,19 @@ defmodule Endo.QueryTest do
   describe "from/1" do
     test "with string literal arg" do
       query = from("foo")
-      assert %Query{from: "foo"} = query
+      assert %Query{from: "foo", tables_count: 1} = query
     end
 
     test "with variable as the arg" do
       table = "foo"
-      query = from(table)
-      assert %Query{from: "foo"} = query
+      query = from(^table)
+      assert %Query{from: {:unsafe, "foo"}, tables_count: 1} = query
     end
   end
 
   describe "select/3" do
     test "single fixed field" do
-      query = %Query{} |> select([q], q["bar"])
+      query = from("table1") |> select([q], q["bar"])
       assert %Query{select: select} = query
       assert List.flatten(select) ==  [
         {:field, [{:bind, 0}, "bar"]}
@@ -28,7 +28,7 @@ defmodule Endo.QueryTest do
 
     test "single dynamic field" do
       f = fn -> "bar" end
-      query = %Query{} |> select([q], q[^f.()])
+      query = from("table1") |> select([q], q[^f.()])
       assert %Query{select: select} = query
       assert List.flatten(select) == [
         {:field, [{:bind, 0}, {:unsafe, "bar"}]}
@@ -336,7 +336,7 @@ defmodule Endo.QueryTest do
     end
 
     test "join multiple tables" do
-      query = %Query{from: "table1"}
+      query = from("table1")
               |> join(:inner, [p], q in "table2", on: p["foo"] == q["bar"])
               |> join(:left, [p, ...], r in "table3", on: p["baz"] == r["qux"])
               |> join(:right, [..., x], y in "table4", on: x["xxx"] == y["yyy"])
@@ -357,14 +357,14 @@ defmodule Endo.QueryTest do
           "table3",
           {{:non_agg, :==}, [
             {:field, [{:bind, 0}, "baz"]},
-            {:field, [{:bind, -1}, "qux"]}
+            {:field, [{:bind, 2}, "qux"]}
           ]}
         }},
         {:right, {
           "table4",
           {{:non_agg, :==}, [
-            {:field, [{:bind, -2}, "xxx"]},
-            {:field, [{:bind, -1}, "yyy"]}
+            {:field, [{:bind, 2}, "xxx"]},
+            {:field, [{:bind, 3}, "yyy"]}
           ]}
         }}
       ]
@@ -387,6 +387,44 @@ defmodule Endo.QueryTest do
             {:field, [{:bind, 1}, "bar"]}
           ]}
         }}
+      ]
+    end
+
+    test "add selection after join" do
+      query = from("table1")
+              |> select([r1], r1["foo"])
+              |> join(:left, [r1], r2 in "table2", on: r1["bar"] == r2["baz"])
+              |> select([..., r2], r2["qux"])
+              |> join(:right, [r1, ...], r3 in "table3", on: r1["abc"] == r3["efg"])
+              |> select([..., r3], r3["hij"])
+
+      assert %Query{
+        tables_count: 3,
+        join: join,
+        select: select
+      } = query
+
+      assert List.flatten(join) == [
+        {:left, {
+          "table2",
+          {{:non_agg, :==}, [
+            {:field, [{:bind, 0}, "bar"]},
+            {:field, [{:bind, 1}, "baz"]}
+          ]}
+        }},
+        {:right, {
+          "table3",
+          {{:non_agg, :==}, [
+            {:field, [{:bind, 0}, "abc"]},
+            {:field, [{:bind, 2}, "efg"]}
+          ]}
+        }}
+      ]
+
+      assert List.flatten(select) == [
+        {:field, [{:bind, 0}, "foo"]},
+        {:field, [{:bind, 1}, "qux"]},
+        {:field, [{:bind, 2}, "hij"]}
       ]
     end
   end

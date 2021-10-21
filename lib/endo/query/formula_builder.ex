@@ -15,7 +15,10 @@ defmodule Endo.Query.FormulaBuilder do
     ">=": :>=,
     "<>": :||,  # String concatenation
     and: :AND,
-    or: :OR
+    or: :OR,
+    in: :IN,
+    like: :LIKE,
+    ilike: :ILIKE
   }
 
   @binary_operators Map.keys(@binary_operator_mapping)
@@ -73,6 +76,13 @@ defmodule Endo.Query.FormulaBuilder do
     formula = "count(distinct #{expr})"
     {formula, args}
   end
+
+    # Count Distinct
+    def build_formula({{_, :is_nil}, [expr]}, alias_prefix, args) do
+      {expr, args} = build_formula(expr, alias_prefix, args)
+      formula = "#{expr} IS NULL"
+      {formula, args}
+    end
 
   # Other functions, including NOT(bool).
   def build_formula({{_, func}, children}, alias_prefix, args) when is_atom(func) do

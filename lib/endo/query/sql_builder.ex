@@ -1,4 +1,4 @@
-defmodule Endo.Query.Builder do
+defmodule Endo.Query.SQLBuilder do
   alias Endo.Query
 
   import Endo.Utils

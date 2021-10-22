@@ -1,8 +1,8 @@
-defmodule Endo.Query.BuilderTest do
+defmodule Endo.Query.SQLBuilderTest do
   use Endo.TestCase, async: true
 
   import Endo.Query
-  alias Endo.Query.Builder
+  alias Endo.Query.SQLBuilder
 
   describe "build_sql/2" do
     test "query that has everything" do
@@ -11,6 +11,7 @@ defmodule Endo.Query.BuilderTest do
       pct = %{percentage: 0.9}
       d_field = "\"What?\""
       d_values = ~w[This is just ridiculous]
+      deadline = ~D[2021-10-31]
 
       subquery = from("table \"9\"") |> select([x], x["foo"])
 
@@ -21,13 +22,14 @@ defmodule Endo.Query.BuilderTest do
               |> join(:left, [a, ...], c in "table3", on: a["f 6"] == c["f 7"])
               |> join(:right, [..., c], d in ^subquery, on: c["foo1"] == d["foo"])
               |> where([a, ..., d], a["AAA"] == "bbb" and d[^d_field] in ^d_values)
+              |> where([a, ...], a["deadline"] <= ^deadline)
               |> group_by([a, ..., d], [a["f 8"] * d["f 9"], d["aa\"bb\"cc"]])
               |> having([a, b, ...], median(a["f 10"] + b["f 11"]) * 2 >= ^threshold)
               |> order_by([..., c, d], asc: c["f 14"], desc: d["f 15"], asc: c["f 16"])
               |> limit(100)
               |> offset(^offset.())
 
-      {sql, args} = Builder.build_sql(query, schema: "data")
+      {sql, args} = SQLBuilder.build_sql(query, schema: "data")
 
       expected_sql = ~Q{
         SELECT
@@ -41,16 +43,16 @@ defmodule Endo.Query.BuilderTest do
           SELECT st0."foo"
           FROM "data"."table ""9""" AS st0
         ) AS t3 ON (t2."foo1" = t3."foo")
-        WHERE ((t0."AAA" = $2) AND (t3."""What?""" IN $3))
+        WHERE (((t0."AAA" = $2) AND (t3."""What?""" IN $3)) AND (t0."deadline" <= $4))
         GROUP BY (t0."f 8" * t3."f 9"), t3."aa""bb""cc"
-        HAVING (((percentile_cont (0.5) WITHIN GROUP (ORDER BY (t0."f 10" + t1."f 11"))) * 2) >= $4)
+        HAVING (((percentile_cont (0.5) WITHIN GROUP (ORDER BY (t0."f 10" + t1."f 11"))) * 2) >= $5)
         ORDER BY t2."f 14" ASC, t3."f 15" DESC, t2."f 16" ASC
         LIMIT 100
-        OFFSET $5
+        OFFSET $6
       }
 
       assert sql == expected_sql
-      assert args == [0.9, "bbb", d_values, 123, 456]
+      assert args == [0.9, "bbb", d_values, deadline, 123, 456]
     end
 
     test "dynamic composition" do
@@ -58,7 +60,7 @@ defmodule Endo.Query.BuilderTest do
         from("table 1")
         |> add_where()
         |> add_select()
-        |> to_sql(schema: ~S["weirdo"])
+        |> SQLBuilder.build_sql(schema: ~S["weirdo"])
 
       expected_sql = ~Q{
         SELECT t0."""dynamic field 1"""

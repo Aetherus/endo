@@ -1,5 +1,27 @@
 defmodule Endo.Query do
-  @opaque t :: %__MODULE__{}
+  @type ast :: number() |
+               boolean() |
+               String.t() |
+               {:unsafe, ast()} |
+               {:field, [{:bind, pos_integer()} | ast()]} |
+               {{:agg, atom()}, [ast()]} |
+               {{:non_agg, atom()}, [ast()]}
+
+  @type qual :: :inner | :left | :right
+
+  @type t :: %__MODULE__{
+    from: String.t() | {:unsafe, String.t()},
+    select: %{optional(pos_integer()) => [ast() | [ast()]]},
+    where: %{optional(pos_integer()) => [ast() | [ast()]]},
+    order_by: %{optional(pos_integer()) => [ast() | [ast()]]},
+    limit: nil | non_neg_integer() | {:unsafe, non_neg_integer()},
+    offset: nil | non_neg_integer() | {:unsafe, non_neg_integer()},
+    group_by: {pos_integer(), ast()},
+    having: {pos_integer(), ast()},
+    join: %{optional(pos_integer()) => {qual(), {String.t() | t() | {:unsafe, t()}, ast()}}},
+    aliases_count: non_neg_integer()
+  }
+
   defstruct [
     from: nil,
     select: %{},
@@ -13,7 +35,7 @@ defmodule Endo.Query do
     aliases_count: 0
   ]
 
-  defdelegate to_sql(query, opts \\ []), to: Endo.Query.Builder, as: :build_sql
+  defdelegate to_sql(query, opts \\ []), to: Endo.Query.SQLBuilder, as: :build_sql
 
   defguardp is_literal(x)
     when is_number(x)
@@ -82,8 +104,14 @@ defmodule Endo.Query do
     quote bind_quoted: [query: query, selections: selections] do
       aliases_count = query.aliases_count
       select = query.select
-      existing_selections = select[aliases_count] || []
-      new_select = Map.put(select, aliases_count, [existing_selections|selections])
+      existing_selections = select[aliases_count]
+      new_selections =
+        if existing_selections do
+          [existing_selections | selections]
+        else
+          selections
+        end
+      new_select = Map.put(select, aliases_count, new_selections)
       %{query | select: new_select}
     end
   end
@@ -136,8 +164,8 @@ defmodule Endo.Query do
     quote bind_quoted: [query: query, exprs: exprs] do
       aliases_count = query.aliases_count
       order_by = query.order_by
-      existing_orders = order_by[aliases_count] || []
-      orders = [existing_orders | exprs]
+      existing_orders = order_by[aliases_count]
+      orders = if existing_orders, do: [existing_orders | exprs], else: exprs
       %{query | order_by: Map.put(order_by, aliases_count, orders)}
     end
   end

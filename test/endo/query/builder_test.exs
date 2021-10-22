@@ -52,5 +52,33 @@ defmodule Endo.Query.BuilderTest do
       assert sql == expected_sql
       assert args == [0.9, "bbb", d_values, 123, 456]
     end
+
+    test "dynamic composition" do
+      {sql, args} =
+        from("table 1")
+        |> add_where()
+        |> add_select()
+        |> to_sql(schema: ~S["weirdo"])
+
+      expected_sql = ~Q{
+        SELECT t0."""dynamic field 1"""
+        FROM """weirdo"""."table 1" AS t0
+        WHERE (t0."""dynamic field 2""" ~* $1)
+      }
+
+      assert sql == expected_sql
+      assert args == ["foo"]
+    end
+
+    defp add_select(query) do
+      field = ~S["dynamic field 1"]
+      select(query, [..., x], x[^field])
+    end
+
+    defp add_where(query) do
+      pattern = "foo"
+      field = ~S["dynamic field 2"]
+      where(query, [..., x], x[^field] =~ ^pattern)
+    end
   end
 end

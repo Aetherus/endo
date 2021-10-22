@@ -1,15 +1,16 @@
 defmodule Endo.Query do
-  @opaque t :: {pos_integer(), %__MODULE__{}}
+  @opaque t :: %__MODULE__{}
   defstruct [
     from: nil,
-    select: [],
-    where: nil,
-    order_by: nil,
+    select: %{},
+    where: %{},
+    order_by: %{},
     limit: nil,
     offset: nil,
     group_by: nil,
     having: nil,
-    join: []
+    join: %{},
+    aliases_count: 0
   ]
 
   defdelegate to_sql(query, opts \\ []), to: Endo.Query.Builder, as: :build_sql
@@ -26,13 +27,11 @@ defmodule Endo.Query do
 
   """
   defmacro from(table) do
-    table = resolve_bind(table, [], nil)
+    table = resolve(table, [])
     quote do
-      {
-        1,
-        %Endo.Query{
-          from: unquote(table)
-        }
+      %Endo.Query{
+        from: unquote(table),
+        aliases_count: 1
       }
     end
   end
@@ -73,17 +72,19 @@ defmodule Endo.Query do
     #    or {:agg, _, [String.t(), expr*]}  (none of the sub exprs should be an aggregation)
     #    or {:fragment, _, [String.t(), expr*]}
 
-    {tables_count, quoted_query} = expand_until_tables_count_and_quoted_query(query)
-
     binds_with_index = index_binds(binds)
 
     selections =
       selections
       |> List.wrap()
-      |> Enum.map(&resolve_bind(&1, binds_with_index, tables_count))
+      |> Enum.map(&resolve(&1, binds_with_index))
 
-    quote do
-      {unquote(tables_count), %{unquote(quoted_query) | select: [unquote(quoted_query).select, unquote(selections)]}}
+    quote bind_quoted: [query: query, selections: selections] do
+      aliases_count = query.aliases_count
+      select = query.select
+      existing_selections = select[aliases_count] || []
+      new_select = Map.put(select, aliases_count, [existing_selections|selections])
+      %{query | select: new_select}
     end
   end
 
@@ -96,26 +97,22 @@ defmodule Endo.Query do
   defmacro where(query, binds, condition) do
     binds_with_index = index_binds(binds)
 
-    {tables_count, quoted_query} = expand_until_tables_count_and_quoted_query(query)
-
-    condition = resolve_bind(condition, binds_with_index, tables_count)
+    condition = resolve(condition, binds_with_index)
 
     if aggregation?(condition) do
       raise ArgumentError, "Where condition must not contain aggregation."
     end
 
-    quote do
-      {
-        unquote(tables_count),
-        %{unquote(quoted_query) | where: (
-            if unquote(quoted_query).where do
-              {{:non_agg, :and}, [unquote(quoted_query).where, unquote(condition)]}
-            else
-              unquote(condition)
-            end
-          )
-        }
-      }
+    quote bind_quoted: [query: query, condition: condition] do
+      aliases_count = query.aliases_count
+      where = query.where
+      existing_condition = where[aliases_count]
+      condition = if existing_condition do
+        {{:non_agg, :and}, [existing_condition, condition]}
+      else
+        condition
+      end
+      %{query | where: Map.put(where, aliases_count, condition)}
     end
   end
 
@@ -128,28 +125,30 @@ defmodule Endo.Query do
   defmacro order_by(query, binds, exprs) do
     binds_with_index = index_binds(binds)
 
-    {tables_count, quoted_query} = expand_until_tables_count_and_quoted_query(query)
-
     exprs = exprs
             |> List.wrap()
-            |> Enum.map(&build_order(&1, binds_with_index, tables_count))
+            |> Enum.map(&build_order(&1, binds_with_index))
 
     if exprs |> Enum.map(&elem(&1, 1)) |> has_aggregation?() do
       raise ArgumentError, "Aggregations are not allowed in order_by."
     end
 
-    quote do
-      {unquote(tables_count), %{unquote(quoted_query) | order_by: unquote(exprs)}}
+    quote bind_quoted: [query: query, exprs: exprs] do
+      aliases_count = query.aliases_count
+      order_by = query.order_by
+      existing_orders = order_by[aliases_count] || []
+      orders = [existing_orders | exprs]
+      %{query | order_by: Map.put(order_by, aliases_count, orders)}
     end
   end
 
-  defp build_order({direction, expr}, binds_with_index, tables_count) when direction in [:asc, :desc] do
-    expr = resolve_bind(expr, binds_with_index, tables_count)
+  defp build_order({direction, expr}, binds_with_index) when direction in [:asc, :desc] do
+    expr = resolve(expr, binds_with_index)
     {direction, expr}
   end
 
-  defp build_order(expr, binds_with_index, tables_count) do
-    expr = resolve_bind(expr, binds_with_index, tables_count)
+  defp build_order(expr, binds_with_index) do
+    expr = resolve(expr, binds_with_index)
     {:asc, expr}
   end
 
@@ -161,10 +160,9 @@ defmodule Endo.Query do
 
   """
   defmacro limit(query, expr) do
-    {tables_count, quoted_query} = expand_until_tables_count_and_quoted_query(query)
-    expr = resolve_bind(expr, [], nil)
-    quote do
-      {unquote(tables_count), %{unquote(quoted_query) | limit: unquote(expr)}}
+    expr = resolve(expr, [])
+    quote bind_quoted: [query: query, expr: expr] do
+      %{query | limit: expr}
     end
   end
 
@@ -175,10 +173,9 @@ defmodule Endo.Query do
 
   """
   defmacro offset(query, expr) do
-    {tables_count, quoted_query} = expand_until_tables_count_and_quoted_query(query)
-    expr = resolve_bind(expr, [], nil)
-    quote do
-      {unquote(tables_count), %{unquote(quoted_query) | offset: unquote(expr)}}
+    expr = resolve(expr, [])
+    quote bind_quoted: [query: query, expr: expr] do
+      %{query | offset: expr}
     end
   end
 
@@ -191,31 +188,35 @@ defmodule Endo.Query do
 
   """
   defmacro group_by(query, binds, exprs) do
-    {tables_count, quoted_query} = expand_until_tables_count_and_quoted_query(query)
     binds_with_index = index_binds(binds)
     exprs = exprs
             |> List.wrap()
-            |> Enum.map(&resolve_bind(&1, binds_with_index, tables_count))
+            |> Enum.map(&resolve(&1, binds_with_index))
     if has_aggregation?(exprs) do
       raise ArgumentError, "Aggregations must not appear in group_by."
     end
 
-    quote do
-      {unquote(tables_count), %{unquote(quoted_query) | group_by: unquote(exprs)}}
+    quote bind_quoted: [query: query, exprs: exprs] do
+      if query.group_by do
+        raise ArgumentError, "GROUP BY clause has already been set."
+      end
+      %{query | group_by: {query.aliases_count, exprs}}
     end
   end
 
   defmacro having(query, binds, expr) do
-    {tables_count, quoted_query} = expand_until_tables_count_and_quoted_query(query)
     binds_with_index = index_binds(binds)
-    expr = resolve_bind(expr, binds_with_index, tables_count)
+    expr = resolve(expr, binds_with_index)
 
     unless aggregation?(expr) do
       raise ArgumentError, "Only an aggregation expression is allowed in having clause."
     end
 
-    quote do
-      {unquote(tables_count), %{unquote(quoted_query) | having: unquote(expr)}}
+    quote bind_quoted: [query: query, expr: expr] do
+      if query.having do
+        raise ArgumentError, "HAVING clause has already been set."
+      end
+      %{query | having: {query.aliases_count, expr}}
     end
   end
 
@@ -225,16 +226,13 @@ defmodule Endo.Query do
       from("table1")
       |> join(:inner, [p, ...], q in "table2", on: p["foo"] == q["bar"])
   """
-  defmacro join(query, qual, parent_binds, {:in, _, [child_bind, subquery]}, on: expr) do
-    {tables_count, quoted_query} = expand_until_tables_count_and_quoted_query(query)
+  defmacro join(query, qual, parent_binds, {:in, _, [child_bind, subquery]}, on: expr) when qual in [:left, :right, :inner] do
     binds_with_index = index_binds(parent_binds ++ [child_bind])
-    tables_count = tables_count + 1
-    expr = resolve_bind(expr, binds_with_index, tables_count)
-    subquery = resolve_bind(subquery, [], nil)
-    quote do
-      {unquote(tables_count), %{unquote(quoted_query) | join: [
-        unquote(quoted_query).join, {unquote(qual), {unquote(subquery), unquote(expr)}}
-      ]}}
+    expr = resolve(expr, binds_with_index)
+    subquery = resolve(subquery, [])
+    quote bind_quoted: [query: query, qual: qual, subquery: subquery, expr: expr] do
+      aliases_count = query.aliases_count + 1
+      %{query | aliases_count: aliases_count, join: Map.put(query.join, aliases_count, {qual, {subquery, expr}})}
     end
   end
 
@@ -256,24 +254,24 @@ defmodule Endo.Query do
   end
 
   # literals
-  defp resolve_bind(literal, _binds_with_index, _tables_count) when is_literal(literal) do
+  defp resolve(literal, _binds_with_index) when is_literal(literal) do
     literal
   end
 
   # ^expr
-  defp resolve_bind({:^, _, [child]}, _binds_with_index, _tables_count) do
+  defp resolve({:^, _, [child]}, _binds_with_index) do
     {:unsafe, child}
   end
 
   # q[something]
-  defp resolve_bind({
+  defp resolve({
     {:., _, [Access, :get]},
     _,
     [bind, things_inside_brackets]
-  }, binds_with_index, tables_count) do
+  }, binds_with_index) do
     {:field, [
-      {:bind, get_bind_index!(binds_with_index, bind, tables_count)},
-      resolve_bind(things_inside_brackets, binds_with_index, tables_count)
+      {:bind, Map.fetch!(binds_with_index, bind)},
+      resolve(things_inside_brackets, binds_with_index)
     ]}
   end
 
@@ -295,11 +293,11 @@ defmodule Endo.Query do
   @aggregation_names Keyword.keys(@aggregations)
 
   # sum(q["foo"])
-  defp resolve_bind({fun, _, children}, binds_with_index, tables_count) when fun in @aggregation_names do
+  defp resolve({fun, _, children}, binds_with_index) when fun in @aggregation_names do
     if length(children) != @aggregations[fun] do
       raise ArgumentError, "#{fun} takes #{@aggregations[fun]} argument(s) but #{length(children)} is given."
     end
-    children = Enum.map(children, &resolve_bind(&1, binds_with_index, tables_count))
+    children = Enum.map(children, &resolve(&1, binds_with_index))
     if has_aggregation?(children) do
       raise ArgumentError, "Can't apply aggregation on aggregation."
     end
@@ -330,11 +328,11 @@ defmodule Endo.Query do
 
   @non_aggregation_names Keyword.keys(@non_aggregations)
 
-  defp resolve_bind({fun, _, children}, binds_with_index, tables_count) when fun in @non_aggregation_names do
+  defp resolve({fun, _, children}, binds_with_index) when fun in @non_aggregation_names do
     if length(children) != @non_aggregations[fun] do
       raise ArgumentError, "#{fun} takes #{@non_aggregations[fun]} argument(s) but #{length(children)} is given."
     end
-    children = Enum.map(children, &resolve_bind(&1, binds_with_index, tables_count))
+    children = Enum.map(children, &resolve(&1, binds_with_index))
     cond do
       static_and_aggregations_only?(children) ->
         {{:agg, fun}, children}
@@ -342,14 +340,6 @@ defmodule Endo.Query do
         raise ArgumentError, "Can't mix aggregation and non-aggregation in one formula."
       true ->
         {{:non_agg, fun}, children}
-    end
-  end
-
-  defp get_bind_index!(binds_with_index, bind, tables_count) do
-    case binds_with_index[bind] do
-      nil -> raise ArgumentError, "Binding #{elem(bind, 0)} is not defined"
-      index when index < 0 -> tables_count + index
-      index -> index
     end
   end
 
@@ -374,11 +364,5 @@ defmodule Endo.Query do
 
   defp static?(expression) do
     literal?(expression) or pinned_expression?(expression)
-  end
-
-  defp expand_until_tables_count_and_quoted_query(quoted) do
-    quoted
-    |> Stream.unfold(&{&1, Macro.expand_once(&1, __ENV__)})
-    |> Enum.find(&match?({count, _} when is_integer(count), &1))
   end
 end

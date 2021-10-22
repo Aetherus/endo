@@ -24,77 +24,78 @@ defmodule Endo.Query.FormulaBuilder do
   @binary_operators Map.keys(@binary_operator_mapping)
 
   # Number and Boolean Literals
-  def build_formula(literal, _alias_prefix, args) when is_number(literal) or is_boolean(literal) do
+  def build_formula(literal, _alias_prefix, _aliases_count, args) when is_number(literal) or is_boolean(literal) do
     {to_string(literal), args}
   end
 
   # String Literals should be considered unsafe even if it's hard-coded.
-  def build_formula(string, _alias_prefix, args) when is_binary(string) do
+  def build_formula(string, _alias_prefix, _aliases_count, args) when is_binary(string) do
     placeholder = next_placeholder(args)
     {placeholder, [{placeholder, string} | args]}
   end
 
   # Dynamic injections (excluding subqueries)
-  def build_formula({:unsafe, value}, _alias_prefix, args) when not is_struct(value, Endo.Query) do
+  def build_formula({:unsafe, value}, _alias_prefix, _aliases_count, args) when not is_struct(value, Endo.Query) do
     placeholder = next_placeholder(args)
     {placeholder, [{placeholder, value} | args]}
   end
 
   # Fields
-  def build_formula({:field, [{:bind, n}, name]}, alias_prefix, args) do
+  def build_formula({:field, [{:bind, n}, name]}, alias_prefix, aliases_count, args) do
+    n = if n >= 0, do: n, else: aliases_count + n
     name = name |> safe!() |> quote_ident()
     field = "#{alias_prefix}#{n}.#{name}"
     {field, args}
   end
 
   # Binary operators. Precedence should be resolved in the query struct construction phase.
-  def build_formula({{_, operator}, [lhs, rhs]}, alias_prefix, args) when operator in @binary_operators do
+  def build_formula({{_, operator}, [lhs, rhs]}, alias_prefix, aliases_count, args) when operator in @binary_operators do
     operator = @binary_operator_mapping[operator]
-    {lhs, args} = build_formula(lhs, alias_prefix, args)
-    {rhs, args} = build_formula(rhs, alias_prefix, args)
+    {lhs, args} = build_formula(lhs, alias_prefix, aliases_count, args)
+    {rhs, args} = build_formula(rhs, alias_prefix, aliases_count, args)
     {"(#{lhs} #{operator} #{rhs})", args}
   end
 
   # Percentile
-  def build_formula({{_, :percentile_cont}, [percentage, expr]}, alias_prefix, args) do
-    {percentage, args} = build_formula(percentage, alias_prefix, args)
-    {expr, args} = build_formula(expr, alias_prefix, args)
+  def build_formula({{_, :percentile_cont}, [percentage, expr]}, alias_prefix, aliases_count, args) do
+    {percentage, args} = build_formula(percentage, alias_prefix, aliases_count, args)
+    {expr, args} = build_formula(expr, alias_prefix, aliases_count, args)
     formula = "(percentile_cont (#{percentage}) WITHIN GROUP (ORDER BY #{expr}))"
     {formula, args}
   end
 
   # Median
-  def build_formula({{_, :median}, [expr]}, alias_prefix, args) do
-    {expr, args} = build_formula(expr, alias_prefix, args)
+  def build_formula({{_, :median}, [expr]}, alias_prefix, aliases_count, args) do
+    {expr, args} = build_formula(expr, alias_prefix, aliases_count, args)
     formula = "(percentile_cont (0.5) WITHIN GROUP (ORDER BY #{expr}))"
     {formula, args}
   end
 
   # Count Distinct
-  def build_formula({{_, :count_distinct}, [expr]}, alias_prefix, args) do
-    {expr, args} = build_formula(expr, alias_prefix, args)
+  def build_formula({{_, :count_distinct}, [expr]}, alias_prefix, aliases_count, args) do
+    {expr, args} = build_formula(expr, alias_prefix, aliases_count, args)
     formula = "count(DISTINCT #{expr})"
     {formula, args}
   end
 
   # is_nil
-  def build_formula({{_, :is_nil}, [expr]}, alias_prefix, args) do
-    {expr, args} = build_formula(expr, alias_prefix, args)
+  def build_formula({{_, :is_nil}, [expr]}, alias_prefix, aliases_count, args) do
+    {expr, args} = build_formula(expr, alias_prefix, aliases_count, args)
     formula = "(#{expr} IS NULL)"
     {formula, args}
   end
 
   # NOT
-  def build_formula({{_, :not}, [expr]}, alias_prefix, args) do
-    {expr, args} = build_formula(expr, alias_prefix, args)
+  def build_formula({{_, :not}, [expr]}, alias_prefix, aliases_count, args) do
+    {expr, args} = build_formula(expr, alias_prefix, aliases_count, args)
     formula = "(NOT #{expr})"
     {formula, args}
   end
 
   # Other functions, including NOT(bool).
-  def build_formula({{_, func}, children}, alias_prefix, args) when is_atom(func) do
+  def build_formula({{_, func}, children}, alias_prefix, aliases_count, args) when is_atom(func) do
     {children, args} = Enum.reduce(children, {[], args}, fn child, {acc, args} ->
-      {child, args} = build_formula(child, alias_prefix, args)
+      {child, args} = build_formula(child, alias_prefix, aliases_count, args)
       {[child | acc], args}
     end)
     children = Enum.reverse(children)

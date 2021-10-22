@@ -4,6 +4,7 @@ defmodule Endo.TestCase do
   using do
     quote do
       import Endo.CompileTimeAssertions
+      import Endo.Sigils
     end
   end
 end

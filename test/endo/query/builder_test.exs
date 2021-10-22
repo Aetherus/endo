@@ -29,8 +29,7 @@ defmodule Endo.Query.BuilderTest do
 
       {sql, args} = Builder.build_sql(query, schema: "data")
 
-      expected_sql =
-        """
+      expected_sql = ~Q{
         SELECT
           t0."f 1",
           count(DISTINCT t0."f 2"),
@@ -48,12 +47,7 @@ defmodule Endo.Query.BuilderTest do
         ORDER BY t2."f 14" ASC, t3."f 15" DESC, t2."f 16" ASC
         LIMIT 100
         OFFSET $5
-        """
-        |> String.replace(~r/\r?\n/, " ", global: true)
-        |> String.replace(~r/\s{2,}/, " ", global: true)
-        |> String.replace(~r/(?<=\()\s/, "", global: true)
-        |> String.replace(~r/\s(?=\))/, "", global: true)
-        |> String.trim()
+      }
 
       assert sql == expected_sql
       assert args == [0.9, "bbb", d_values, 123, 456]

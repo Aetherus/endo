@@ -10,7 +10,7 @@ defmodule Endo.Query.SQLBuilderTest do
       offset = fn -> 456 end
       pct = %{percentage: 0.9}
       d_field = "\"What?\""
-      d_values = ~w[This is just ridiculous]
+      d_values = ~w[some values]
       deadline = ~D[2021-10-31]
 
       subquery = from("table \"9\"") |> select([x], x["foo"])
@@ -55,6 +55,16 @@ defmodule Endo.Query.SQLBuilderTest do
 
       assert sql == expected_sql
       assert args == [0.9, "-", "bbb", d_values, deadline, 123, 456]
+    end
+
+    test "from only" do
+      {sql, []} = from("table1")
+                  |> to_sql()
+
+      assert sql == ~Q{
+        SELECT *
+        FROM "public"."table1" AS t0
+      }
     end
 
     test "dynamic composition" do

@@ -57,8 +57,8 @@ defmodule Endo.Query.SQLBuilder do
 
   defguardp is_empty(value) when value in [nil, [], %{}]
 
-  defp build_select_clause(selects, _schema, alias_prefix, args, _opts) when is_empty(selects) do
-    {"SELECT #{alias_prefix}.*", args}
+  defp build_select_clause(selects, _schema, _alias_prefix, args, _opts) when is_empty(selects) do
+    {"SELECT *", args}
   end
 
   defp build_select_clause(selects, _schema, alias_prefix, args, _opts) do
@@ -108,12 +108,16 @@ defmodule Endo.Query.SQLBuilder do
     {joins, args}
   end
 
-  defp build_join_clause({qual, {{:unsafe, %Query{} = subquery}, on}}, schema, alias_prefix, i, args, opts) do
+  defp build_join_clause({qual, {%Query{} = subquery, on}}, schema, alias_prefix, i, args, opts) do
     qual = qual |> to_string() |> String.upcase()
-    {subquery, args} = do_build_sql(subquery, schema, "s#{alias_prefix}", false, args, opts)
+    {subquery, args} = do_build_sql(subquery, IO.inspect(schema), "s#{alias_prefix}", false, args, opts)
     {on, args} = build_formula(on, alias_prefix, i, args)
     clause = "#{qual} JOIN (#{subquery}) AS #{alias_prefix}#{i - 1} ON #{on}"
     {clause, args}
+  end
+
+  defp build_join_clause({qual, {{:unsafe, %Query{} = subquery}, on}}, schema, alias_prefix, i, args, opts) do
+    build_join_clause({qual, {subquery, on}}, schema, alias_prefix, i, args, opts)
   end
 
   defp build_join_clause({qual, {table, on}}, schema, alias_prefix, i, args, _opts) do

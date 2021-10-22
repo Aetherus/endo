@@ -92,6 +92,14 @@ defmodule Endo.Query.FormulaBuilder do
     {formula, args}
   end
 
+  # e.g. extract("year" FROM date)
+  def build_formula({{_, :extract}, [unit, expr]}, alias_prefix, aliases_count, args) do
+    unit = unit |> safe!() |> quote_ident()
+    {expr, args} = build_formula(expr, alias_prefix, aliases_count, args)
+    formula = "extract(#{unit} FROM #{expr})"
+    {formula, args}
+  end
+
   # Other functions, including NOT(bool).
   def build_formula({{_, func}, children}, alias_prefix, aliases_count, args) when is_atom(func) do
     {children, args} = Enum.reduce(children, {[], args}, fn child, {acc, args} ->

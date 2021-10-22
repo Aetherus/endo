@@ -20,6 +20,7 @@ defmodule Endo.Query.SQLBuilderTest do
               |> join(:inner, [a], b in "table 2", on: a["f 3"] == b["f 4"] and not is_nil(a["f 5"]))
               |> select([..., b], percentile_cont(^pct.percentage, b["f6"]))
               |> join(:left, [a, ...], c in "table3", on: a["f 6"] == c["f 7"])
+              |> select([..., c], max(extract("year", c["order date"]) <> "-" <> extract("month", c["order date"])))
               |> join(:right, [..., c], d in ^subquery, on: c["foo1"] == d["foo"])
               |> where([a, ..., d], a["AAA"] == "bbb" and d[^d_field] in ^d_values)
               |> where([a, ...], a["deadline"] <= ^deadline)
@@ -35,7 +36,8 @@ defmodule Endo.Query.SQLBuilderTest do
         SELECT
           t0."f 1",
           count(DISTINCT t0."f 2"),
-          (percentile_cont ($1) WITHIN GROUP (ORDER BY t1."f6"))
+          (percentile_cont ($1) WITHIN GROUP (ORDER BY t1."f6")),
+          max((extract("year" FROM t2."order date") || ($2 || extract("month" FROM t2."order date"))))
         FROM "data"."table 1" AS t0
         INNER JOIN "data"."table 2" AS t1 ON ((t0."f 3" = t1."f 4") AND (NOT (t0."f 5" IS NULL)))
         LEFT JOIN "data"."table3" AS t2 ON (t0."f 6" = t2."f 7")
@@ -43,16 +45,16 @@ defmodule Endo.Query.SQLBuilderTest do
           SELECT st0."foo"
           FROM "data"."table ""9""" AS st0
         ) AS t3 ON (t2."foo1" = t3."foo")
-        WHERE (((t0."AAA" = $2) AND (t3."""What?""" IN $3)) AND (t0."deadline" <= $4))
+        WHERE (((t0."AAA" = $3) AND (t3."""What?""" IN $4)) AND (t0."deadline" <= $5))
         GROUP BY (t0."f 8" * t3."f 9"), t3."aa""bb""cc"
-        HAVING (((percentile_cont (0.5) WITHIN GROUP (ORDER BY (t0."f 10" + t1."f 11"))) * 2) >= $5)
+        HAVING (((percentile_cont (0.5) WITHIN GROUP (ORDER BY (t0."f 10" + t1."f 11"))) * 2) >= $6)
         ORDER BY t2."f 14" ASC, t3."f 15" DESC, t2."f 16" ASC
         LIMIT 100
-        OFFSET $6
+        OFFSET $7
       }
 
       assert sql == expected_sql
-      assert args == [0.9, "bbb", d_values, deadline, 123, 456]
+      assert args == [0.9, "-", "bbb", d_values, deadline, 123, 456]
     end
 
     test "dynamic composition" do

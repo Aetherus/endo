@@ -355,7 +355,8 @@ defmodule Endo.Query do
     in: 2,
     and: 2,
     or: 2,
-    not: 1
+    not: 1,
+    extract: 2
   ]
 
   @non_aggregation_names Keyword.keys(@non_aggregations)

@@ -5,4 +5,7 @@ defmodule Endo.Utils do
       |> String.replace("\"", "\"\"", global: true)
     ~s["#{escaped}"]
   end
+
+  def safe!({:unsafe, value}), do: value
+  def safe!(value), do: value
 end

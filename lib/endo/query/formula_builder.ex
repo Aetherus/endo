@@ -108,7 +108,4 @@ defmodule Endo.Query.FormulaBuilder do
     n = String.to_integer(n)
     "$#{n + 1}"
   end
-
-  defp safe!({:unsafe, value}), do: value
-  defp safe!(value), do: value
 end

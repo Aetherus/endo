@@ -110,7 +110,7 @@ defmodule Endo.Query.SQLBuilder do
 
   defp build_join_clause({qual, {%Query{} = subquery, on}}, schema, alias_prefix, i, args, opts) do
     qual = qual |> to_string() |> String.upcase()
-    {subquery, args} = do_build_sql(subquery, IO.inspect(schema), "s#{alias_prefix}", false, args, opts)
+    {subquery, args} = do_build_sql(subquery, schema, "s#{alias_prefix}", false, args, opts)
     {on, args} = build_formula(on, alias_prefix, i, args)
     clause = "#{qual} JOIN (#{subquery}) AS #{alias_prefix}#{i - 1} ON #{on}"
     {clause, args}
@@ -205,7 +205,4 @@ defmodule Endo.Query.SQLBuilder do
 
   defp dir(:asc), do: "ASC"
   defp dir(:desc), do: "DESC"
-
-  defp safe!({:unsafe, value}), do: value
-  defp safe!(value), do: value
 end

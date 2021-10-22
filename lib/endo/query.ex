@@ -3,7 +3,7 @@ defmodule Endo.Query do
   defstruct [
     from: nil,
     select: [],
-    where: true,
+    where: nil,
     order_by: nil,
     limit: nil,
     offset: nil,
@@ -107,8 +107,13 @@ defmodule Endo.Query do
     quote do
       {
         unquote(tables_count),
-        %{unquote(quoted_query) | where:
-          {{:non_agg, :and}, [unquote(quoted_query).where, unquote(condition)]}
+        %{unquote(quoted_query) | where: (
+            if unquote(quoted_query).where do
+              {{:non_agg, :and}, [unquote(quoted_query).where, unquote(condition)]}
+            else
+              unquote(condition)
+            end
+          )
         }
       }
     end

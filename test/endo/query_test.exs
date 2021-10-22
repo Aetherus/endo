@@ -177,10 +177,10 @@ defmodule Endo.QueryTest do
     test "happy case" do
       query = from("table1") |> where([q], q["foo"] > 10)
       assert {1, %Query{
-        where: {{:non_agg, :and}, [true, {{:non_agg, :>}, [
+        where: {{:non_agg, :>}, [
           {:field, [{:bind, 0}, "foo"]},
           10
-        ]}]}
+        ]}
       }} = query
     end
 
@@ -198,19 +198,10 @@ defmodule Endo.QueryTest do
 
       assert {1, %Query{
         where: {{:non_agg, :and}, [
-          {{:non_agg, :and}, [
-            true,
-            {{:non_agg, :>}, [
-              {:field, [{:bind, 0}, "foo"]},
-              10
-            ]}
-          ]},
-          {{:non_agg, :<=}, [
-            {:field, [{:bind, 0}, "bar"]},
-            100
-          ]}
-        ]
-      }}} = query
+          {{:non_agg, :>}, [{:field, [{:bind, 0}, "foo"]}, 10]},
+          {{:non_agg, :<=}, [{:field, [{:bind, 0}, "bar"]}, 100]}
+        ]}
+      }} = query
     end
   end
 

@@ -74,8 +74,8 @@ defmodule Endo.Query.Builder do
       selects
       |> List.flatten()
       |> Enum.reduce({[], args}, fn select, {acc, args} ->
-        {snippet, args} = build_formula(select, alias_prefix, args)
-        {[snippet | acc], args}
+        {clause, args} = build_formula(select, alias_prefix, args)
+        {[clause | acc], args}
       end)
 
     selects =
@@ -92,31 +92,31 @@ defmodule Endo.Query.Builder do
 
   defp build_from_clause(table, schema, alias_prefix, args, _opts) do
     table = table |> safe!() |> quote_ident()
-    snippet = "FROM #{schema}.#{table} AS #{alias_prefix}0"
-    {snippet, args}
+    clause = "FROM #{schema}.#{table} AS #{alias_prefix}0"
+    {clause, args}
   end
 
   defp build_join_clause({qual, {{:unsafe, {_, %Query{} = subquery}}, on}}, _schema, alias_prefix, i, args, opts) do
     qual = qual |> to_string() |> String.upcase()
     {subquery, args} = do_build_sql(subquery, "s#{alias_prefix}", false, args, opts)
     {on, args} = build_formula(on, alias_prefix, args)
-    snippet = "#{qual} JOIN (#{subquery}) AS #{alias_prefix}#{i} ON #{on}"
-    {snippet, args}
+    clause = "#{qual} JOIN (#{subquery}) AS #{alias_prefix}#{i} ON #{on}"
+    {clause, args}
   end
 
   defp build_join_clause({qual, {table, on}}, schema, alias_prefix, i, args, _opts) do
     qual = qual |> to_string() |> String.upcase()
     table = table |> safe!() |> quote_ident()
     {on, args} = build_formula(on, alias_prefix, args)
-    snippet = "#{qual} JOIN #{schema}.#{table} AS #{alias_prefix}#{i} ON #{on}"
-    {snippet, args}
+    clause = "#{qual} JOIN #{schema}.#{table} AS #{alias_prefix}#{i} ON #{on}"
+    {clause, args}
   end
 
   defp build_where_clause(where, _schema, _alias_prefix, args, _opts) when is_empty(where), do: {[], args}
   defp build_where_clause(where, _schema, alias_prefix, args, _opts) do
     {where, args} = build_formula(where, alias_prefix, args)
-    snippet = "WHERE #{where}"
-    {snippet, args}
+    clause = "WHERE #{where}"
+    {clause, args}
   end
 
   defp build_group_by_clause(group_by, _schema, _alias_prefix, args, _opts) when is_empty(group_by), do: {[], args}
@@ -129,15 +129,15 @@ defmodule Endo.Query.Builder do
       end)
 
     group_by = group_by |> Enum.reverse() |> Enum.join(", ")
-    snippet = "GROUP BY #{group_by}"
-    {snippet, args}
+    clause = "GROUP BY #{group_by}"
+    {clause, args}
   end
 
   defp build_having_clause(having, _schema, _alias_prefix, args, _opts) when is_empty(having), do: {[], args}
   defp build_having_clause(having, _schema, alias_prefix, args, _opts) do
     {having, args} = build_formula(having, alias_prefix, args)
-    snippet = "HAVING #{having}"
-    {snippet, args}
+    clause = "HAVING #{having}"
+    {clause, args}
   end
 
   defp build_order_by_clause(order_by, _schema, _alias_prefix, args, _opts) when is_empty(order_by), do: {[], args}
@@ -154,22 +154,22 @@ defmodule Endo.Query.Builder do
              |> Enum.map(fn {direction, expr} -> "#{expr} #{dir(direction)}" end)
              |> Enum.join(", ")
 
-    snippet = "ORDER BY #{orders}"
-    {snippet, args}
+    clause = "ORDER BY #{orders}"
+    {clause, args}
   end
 
   defp build_limit_clause(limit, _schema, _alias_prefix, args, _opts) when is_empty(limit), do: {[], args}
   defp build_limit_clause(limit, _schema, alias_prefix, args, _opts) do
     {limit, args} = build_formula(limit, alias_prefix, args)
-    snippet = "LIMIT #{limit}"
-    {snippet, args}
+    clause = "LIMIT #{limit}"
+    {clause, args}
   end
 
   defp build_offset_clause(offset, _schema, _alias_prefix, args, _opts) when is_empty(offset), do: {[], args}
   defp build_offset_clause(offset, _schema, alias_prefix, args, _opts) do
     {offset, args} = build_formula(offset, alias_prefix, args)
-    snippet = "OFFSET #{offset}"
-    {snippet, args}
+    clause = "OFFSET #{offset}"
+    {clause, args}
   end
 
   defp dir(:asc), do: "ASC"

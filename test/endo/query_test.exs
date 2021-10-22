@@ -20,7 +20,7 @@ defmodule Endo.QueryTest do
   describe "select/3" do
     test "single fixed field" do
       query = from("table1") |> select([q], q["bar"])
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: false} = query
       assert List.flatten(select) ==  [
         {:field, [{:bind, 0}, "bar"]}
       ]
@@ -29,7 +29,7 @@ defmodule Endo.QueryTest do
     test "single dynamic field" do
       f = fn -> "bar" end
       query = from("table1") |> select([q], q[^f.()])
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: false} = query
       assert List.flatten(select) == [
         {:field, [{:bind, 0}, {:unsafe, "bar"}]}
       ]
@@ -38,7 +38,7 @@ defmodule Endo.QueryTest do
     test "multiple fields" do
       f = fn -> "qux" end
       query = from("table1") |> select([q], [q["bar"], q[^f.()]])
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: false} = query
       assert List.flatten(select) == [
         {:field, [{:bind, 0}, "bar"]},
         {:field, [{:bind, 0}, {:unsafe, "qux"}]}
@@ -47,7 +47,7 @@ defmodule Endo.QueryTest do
 
     test "multiple bindings" do
       query = from("table1") |> select([p, q], [p["foo"], q["bar"]])
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: false} = query
       assert List.flatten(select) == [
         {:field, [{:bind, 0}, "foo"]},
         {:field, [{:bind, 1}, "bar"]}
@@ -56,7 +56,7 @@ defmodule Endo.QueryTest do
 
     test "binary operator" do
       query = from("table1") |> select([p], p["foo"] + p["bar"])
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: false} = query
       assert List.flatten(select) == [
         {{:non_agg, :+}, [
           {:field, [{:bind, 0}, "foo"]},
@@ -67,7 +67,7 @@ defmodule Endo.QueryTest do
 
     test "binary operator with literal on one side" do
       query = from("table1") |> select([p], p["foo"] + 123)
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: false} = query
       assert List.flatten(select) == [
         {{:non_agg, :+}, [
           {:field, [{:bind, 0}, "foo"]},
@@ -78,7 +78,7 @@ defmodule Endo.QueryTest do
 
     test "binary operator with literal on one side and aggregation on the other" do
       query = from("table1") |> select([p], avg(p["foo"]) * 123)
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: true} = query
       assert List.flatten(select) == [
         {{:agg, :*}, [
           {{:agg, :avg}, [
@@ -91,7 +91,7 @@ defmodule Endo.QueryTest do
 
     test "binary operator with aggregation on both sides" do
       query = from("table1") |> select([p], sum(p["foo"]) - avg(p["bar"]))
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: true} = query
       assert List.flatten(select) == [
         {{:agg, :-}, [
           {{:agg, :sum}, [
@@ -113,7 +113,7 @@ defmodule Endo.QueryTest do
 
     test "aggregation on a field" do
       query = from("table1") |> select([p], sum(p["foo"]))
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: true} = query
       assert List.flatten(select) == [
         {{:agg, :sum}, [
           {:field, [{:bind, 0}, "foo"]}
@@ -123,7 +123,7 @@ defmodule Endo.QueryTest do
 
     test "aggregation on calculation" do
       query = from("table1") |> select([p], sum(p["foo"] + p["bar"]))
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: true} = query
       assert List.flatten(select) == [
         {{:agg, :sum}, [
           {{:non_agg, :+}, [
@@ -143,7 +143,7 @@ defmodule Endo.QueryTest do
 
     test "aggregation with extra args" do
       query = from("table1") |> select([p], percentile_cont(0.95, p["foo"]))
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: true} = query
       assert List.flatten(select) == [
         {{:agg, :percentile_cont}, [
           0.95,
@@ -164,7 +164,7 @@ defmodule Endo.QueryTest do
               |> select([q], q["foo"])
               |> select([r], [r["bar"], r["baz"]])
 
-      assert %Query{select: %{1 => select}} = query
+      assert %Query{select: %{1 => select}, aggregate?: false} = query
       assert List.flatten(select) == [
         {:field, [{:bind, 0}, "foo"]},
         {:field, [{:bind, 0}, "bar"]},

@@ -19,7 +19,8 @@ defmodule Endo.Query do
     group_by: {pos_integer(), ast()},
     having: {pos_integer(), ast()},
     join: %{optional(pos_integer()) => {qual(), {String.t() | t() | {:unsafe, t()}, ast()}}},
-    aliases_count: non_neg_integer()
+    aliases_count: non_neg_integer(),
+    aggregate?: boolean()
   }
 
   defstruct [
@@ -32,7 +33,8 @@ defmodule Endo.Query do
     group_by: nil,
     having: nil,
     join: %{},
-    aliases_count: 0
+    aliases_count: 0,
+    aggregate?: false
   ]
 
   defdelegate to_sql(query, opts \\ []), to: Endo.Query.SQLBuilder, as: :build_sql
@@ -101,7 +103,9 @@ defmodule Endo.Query do
       |> List.wrap()
       |> Enum.map(&resolve(&1, binds_with_index))
 
-    quote bind_quoted: [query: query, selections: selections] do
+    is_aggregate = Enum.any?(selections, &aggregation?/1)
+
+    quote bind_quoted: [query: query, selections: selections, is_aggregate: is_aggregate] do
       aliases_count = query.aliases_count
       select = query.select
       existing_selections = select[aliases_count]
@@ -112,7 +116,7 @@ defmodule Endo.Query do
           selections
         end
       new_select = Map.put(select, aliases_count, new_selections)
-      %{query | select: new_select}
+      %{query | select: new_select, aggregate?: is_aggregate or query.aggregate?}
     end
   end
 

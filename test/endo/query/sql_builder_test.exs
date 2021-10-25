@@ -15,6 +15,8 @@ defmodule Endo.Query.SQLBuilderTest do
 
       subquery = from("table \"9\"") |> select([x], x["foo"])
 
+      weighted_sum_unit = "%"
+
       query = from("table 1")
               |> select([a], [a["f 1"], count_distinct(a["f 2"])])
               |> join(:inner, [a], b in "table 2", on: a["f 3"] == b["f 4"] and not is_nil(a["f 5"]))
@@ -22,7 +24,7 @@ defmodule Endo.Query.SQLBuilderTest do
               |> join(:left, [a, ...], c in "table3", on: a["f 6"] == c["f 7"])
               |> select([..., c], max(extract("year", c["order date"]) <> "-" <> extract("month", c["order date"])))
               |> join(:right, [..., c], d in ^subquery, on: c["foo1"] == d["foo"])
-              |> select([a, ..., d], agg("weighted_sum(?, ?)", d["likes"], a["weight"]))
+              |> select([a, ..., d], agg("weighted_sum(?, ?, ?)", d["likes"], a["weight"], ^weighted_sum_unit))
               |> where([a, ..., d], a["AAA"] == "bbb" and d[^d_field] in ^d_values)
               |> where([a, ...], a["deadline"] <= ^deadline)
               |> group_by([a, ..., d], [a["f 8"] * d["f 9"], d["aa\"bb\"cc"]])
@@ -39,7 +41,7 @@ defmodule Endo.Query.SQLBuilderTest do
           count(DISTINCT t0."f 2"),
           (percentile_cont ($1) WITHIN GROUP (ORDER BY t1."f6")),
           max((extract("year" FROM t2."order date") || ($2 || extract("month" FROM t2."order date")))),
-          weighted_sum(t3."likes", t0."weight")
+          weighted_sum(t3."likes", t0."weight", $3)
         FROM "data"."table 1" AS t0
         INNER JOIN "data"."table 2" AS t1 ON ((t0."f 3" = t1."f 4") AND (NOT (t0."f 5" IS NULL)))
         LEFT JOIN "data"."table3" AS t2 ON (t0."f 6" = t2."f 7")
@@ -47,16 +49,16 @@ defmodule Endo.Query.SQLBuilderTest do
           SELECT st0."foo"
           FROM "data"."table ""9""" AS st0
         ) AS t3 ON (t2."foo1" = t3."foo")
-        WHERE (((t0."AAA" = $3) AND (t3."""What?""" IN $4)) AND (t0."deadline" <= $5))
+        WHERE (((t0."AAA" = $4) AND (t3."""What?""" IN $5)) AND (t0."deadline" <= $6))
         GROUP BY (t0."f 8" * t3."f 9"), t3."aa""bb""cc"
-        HAVING (((percentile_cont (0.5) WITHIN GROUP (ORDER BY (t0."f 10" + t1."f 11"))) * 2) >= $6)
+        HAVING (((percentile_cont (0.5) WITHIN GROUP (ORDER BY (t0."f 10" + t1."f 11"))) * 2) >= $7)
         ORDER BY t2."f 14" ASC, t3."f 15" DESC, t2."f 16" ASC
         LIMIT 100
-        OFFSET $7
+        OFFSET $8
       }
 
       assert sql == expected_sql
-      assert args == [0.9, "-", "bbb", d_values, deadline, 123, 456]
+      assert args == [0.9, "-", "%", "bbb", d_values, deadline, 123, 456]
     end
 
     test "from only" do

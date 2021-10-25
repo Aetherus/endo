@@ -21,7 +21,7 @@ A query builder to provide a more dynamic and more flexible query building exper
 ```elixir
 from("Superstore Orders")
 |> select([q], q["Name"], q["Sales"])
-|> to_sql(prefix: "data")
+|> to_sql(schema: "data")
 ```
 
 Generates SQL
@@ -42,7 +42,7 @@ regions = ["East", "West"]
 from("Superstore Orders")
 |> select([q], q["Product Name"], q["Sales"])
 |> where([q], q["Region"] in ^regions)
-|> to_sql(prefix: "data")
+|> to_sql(schema: "data")
 ```
 
 Generates SQL
@@ -68,7 +68,7 @@ from("Superstore Orders")
 )
 |> limit(10)
 |> offset(20)
-|> to_sql(prefix: "data")
+|> to_sql(schema: "data")
 ```
 
 Generates SQL
@@ -96,7 +96,7 @@ from("Superstore Orders")
 )
 |> group_by([q], q["Product Name"])
 |> having([q], agg("avg(?)", q["Sales"]) > 10_000)
-|> to_sql(prefix: "data")
+|> to_sql(schema: "data")
 ```
 
 Generates SQL
@@ -121,7 +121,7 @@ from("Superstore Orders")
   d["Product Name"],
   p["Name"]
 ])
-|> to_sql(prefix: "data")
+|> to_sql(schema: "data")
 ```
 
 Generates SQL
@@ -148,7 +148,7 @@ sub = from("Superstore Orders")
 from("Superstore People")
 |> where([q], q["ID"] in ^sub)
 |> select([q], q["Name"])
-|> to_sql(prefix: "data")
+|> to_sql(schema: "data")
 ```
 
 Generates SQL

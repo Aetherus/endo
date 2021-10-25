@@ -88,6 +88,33 @@ defmodule Endo.Query.SQLBuilderTest do
       assert args == ["foo"]
     end
 
+    test "dynamics" do
+      expr1 = dynamic([..., x], x["foo"] <> x["bar"])
+      expr2 = dynamic([..., y], min(y["blah"]))
+      {sql, ["M"]} =
+        from("table 1")
+        |> select([p], [^expr1, sum(p["qux"])])
+        |> join(:inner, [p], q in "table 2", on: p["x"] == q["y"])
+        |> select([..., q], ^expr2)
+        |> where([p], not is_nil(^expr1))
+        |> group_by([p], ^expr1)
+        |> having([p], max(^expr1) < "M")
+        |> to_sql(schema: "data")
+
+      assert sql == ~Q{
+        SELECT
+          (t0."foo" || t0."bar"),
+          sum(t0."qux"),
+          min(t1."blah")
+        FROM "data"."table 1" AS t0
+        INNER JOIN "data"."table 2" AS t1
+        ON (t0."x" = t1."y")
+        WHERE (NOT ((t1."foo" || t1."bar") IS NULL))
+        GROUP BY (t1."foo" || t1."bar")
+        HAVING (max((t1."foo" || t1."bar")) < $1)
+      }
+    end
+
     defp add_select(query) do
       field = ~S["dynamic field 1"]
       select(query, [..., x], x[^field])

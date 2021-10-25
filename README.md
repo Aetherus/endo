@@ -166,3 +166,25 @@ WHERE
     HAVING sum("s0"."Profit") < $1
   )
 ```
+
+## Dynamics
+
+```elixir
+dynamic_fragment = dynamic([q], q["foo"] <> q["bar"])
+
+from("my_table")
+|> select([q], ^dynamic_fragment)
+|> where([q], not is_nil(^dynamic_fragment))
+|> to_sql(schema: "data")
+```
+
+Generates SQL
+
+```sql
+SELECT
+  t0."foo" || t0."bar"
+FROM
+  "data"."my_table" AS t0
+WHERE
+  NOT((t0."foo" || t0."bar") IS NULL)
+```

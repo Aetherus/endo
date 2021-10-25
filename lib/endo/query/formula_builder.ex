@@ -30,14 +30,19 @@ defmodule Endo.Query.FormulaBuilder do
 
   # String Literals should be considered unsafe even if it's hard-coded.
   def build_formula(string, _alias_prefix, _aliases_count, args) when is_binary(string) do
-    placeholder = next_placeholder(args)
-    {placeholder, [{placeholder, string} | args]}
+    placeholder = next_placeholder_index(args)
+    {"$#{placeholder}", [{placeholder, string} | args]}
+  end
+
+  # Dynamics
+  def build_formula({:unsafe, {{_, :dynamic}, fun}}, alias_prefix, aliases_count, args) when is_function(fun, 3) do
+    fun.(alias_prefix, aliases_count, args)
   end
 
   # Dynamic injections (excluding subqueries)
   def build_formula({:unsafe, value}, _alias_prefix, _aliases_count, args) when not is_struct(value, Endo.Query) do
-    placeholder = next_placeholder(args)
-    {placeholder, [{placeholder, value} | args]}
+    placeholder = next_placeholder_index(args)
+    {"$#{placeholder}", [{placeholder, value} | args]}
   end
 
   # Fields
@@ -136,9 +141,6 @@ defmodule Endo.Query.FormulaBuilder do
     end
   end
 
-  defp next_placeholder([]), do: "$1"
-  defp next_placeholder([{"$" <> n, _} | _]) do
-    n = String.to_integer(n)
-    "$#{n + 1}"
-  end
+  defp next_placeholder_index([]), do: 1
+  defp next_placeholder_index([{n, _} | _]), do: n + 1
 end

@@ -268,6 +268,15 @@ defmodule Endo.Query do
     end
   end
 
+  defmacro dynamic(binds, expr) do
+    binds_with_index = index_binds(binds)
+    expr = resolve(expr, binds_with_index)
+    type = if aggregation?(expr), do: {:agg, :dynamic}, else: {:non_agg, :dynamic}
+    quote bind_quoted: [expr: expr, type: type] do
+      {type, &Endo.Query.FormulaBuilder.build_formula(expr, &1, &2, &3)}
+    end
+  end
+
   defp index_binds(binds) do
     {leading, trailing} = Enum.split_while(binds, &!match?({:..., _, _}, &1))
 
@@ -367,6 +376,8 @@ defmodule Endo.Query do
     end
     children = Enum.map(children, &resolve(&1, binds_with_index))
     cond do
+      static_only?(children) ->
+        {{:non_agg, fun}, children}
       static_and_aggregations_only?(children) ->
         {{:agg, fun}, children}
       has_aggregation?(children) ->
@@ -390,6 +401,10 @@ defmodule Endo.Query do
 
   defp literal?(node) when is_literal(node), do: true
   defp literal?(_node), do: false
+
+  defp static_only?(nodes) do
+    Enum.all?(nodes, &static?/1)
+  end
 
   defp static_and_aggregations_only?(nodes) do
     Enum.all?(nodes, & static?(&1) or aggregation?(&1))

@@ -391,11 +391,10 @@ defmodule Endo.Query do
     Enum.any?(nodes, &aggregation?/1)
   end
 
-  defp pinned_expression?({:^, _, [_]}), do: true
-  defp pinned_expression?({:unsafe, _}), do: true
-  defp pinned_expression?(_), do: false
+  defp unsafe_expression?({:unsafe, _}), do: true
+  defp unsafe_expression?(_), do: false
 
   defp static?(expression) do
-    literal?(expression) or pinned_expression?(expression)
+    literal?(expression) or unsafe_expression?(expression)
   end
 end

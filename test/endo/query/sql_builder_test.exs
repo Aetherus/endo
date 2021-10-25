@@ -22,6 +22,7 @@ defmodule Endo.Query.SQLBuilderTest do
               |> join(:left, [a, ...], c in "table3", on: a["f 6"] == c["f 7"])
               |> select([..., c], max(extract("year", c["order date"]) <> "-" <> extract("month", c["order date"])))
               |> join(:right, [..., c], d in ^subquery, on: c["foo1"] == d["foo"])
+              |> select([a, ..., d], agg("weighted_sum(?, ?)", d["likes"], a["weight"]))
               |> where([a, ..., d], a["AAA"] == "bbb" and d[^d_field] in ^d_values)
               |> where([a, ...], a["deadline"] <= ^deadline)
               |> group_by([a, ..., d], [a["f 8"] * d["f 9"], d["aa\"bb\"cc"]])
@@ -37,7 +38,8 @@ defmodule Endo.Query.SQLBuilderTest do
           t0."f 1",
           count(DISTINCT t0."f 2"),
           (percentile_cont ($1) WITHIN GROUP (ORDER BY t1."f6")),
-          max((extract("year" FROM t2."order date") || ($2 || extract("month" FROM t2."order date"))))
+          max((extract("year" FROM t2."order date") || ($2 || extract("month" FROM t2."order date")))),
+          weighted_sum(t3."likes", t0."weight")
         FROM "data"."table 1" AS t0
         INNER JOIN "data"."table 2" AS t1 ON ((t0."f 3" = t1."f 4") AND (NOT (t0."f 5" IS NULL)))
         LEFT JOIN "data"."table3" AS t2 ON (t0."f 6" = t2."f 7")

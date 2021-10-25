@@ -159,6 +159,36 @@ defmodule Endo.QueryTest do
       end
     end
 
+    test "free-style aggregation" do
+      suffix = "_suffix"
+      query = from("table1") |> select([p], agg("my_agg(?, ?)", p["foo"], p["bar"] <> ^suffix))
+      assert %Query{select: %{1 => select}, aggregate?: true} = query
+      assert List.flatten(select) == [
+        {{:agg, "my_agg(?, ?)"}, [
+          {:field, [{:bind, 0}, "foo"]},
+          {{:non_agg, :<>}, [
+            {:field, [{:bind, 0}, "bar"]},
+            {:unsafe, "_suffix"}
+          ]}
+        ]}
+      ]
+    end
+
+    test "free-style non-aggregation" do
+      suffix = "_suffix"
+      query = from("table1") |> select([p], non_agg("my_func(?, ?)", p["foo"], p["bar"] <> ^suffix))
+      assert %Query{select: %{1 => select}, aggregate?: false} = query
+      assert List.flatten(select) == [
+        {{:non_agg, "my_func(?, ?)"}, [
+          {:field, [{:bind, 0}, "foo"]},
+          {{:non_agg, :<>}, [
+            {:field, [{:bind, 0}, "bar"]},
+            {:unsafe, "_suffix"}
+          ]}
+        ]}
+      ]
+    end
+
     test "chaining" do
       query = from("table1")
               |> select([q], q["foo"])

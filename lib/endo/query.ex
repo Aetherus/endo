@@ -376,6 +376,14 @@ defmodule Endo.Query do
     end
   end
 
+  # Free-style aggregate and non-aggregate SQL fragments
+  # - agg(sql_fragment, args)
+  # - non_agg(sql_fragment, args)
+  defp resolve({agg_type, _, [fragment | args]}, binds_with_index) when agg_type in [:agg, :non_agg] do
+    args = Enum.map(args, &resolve(&1, binds_with_index))
+    {{agg_type, fragment}, args}
+  end
+
   defp aggregation?(node) do
     match?({{:agg, _}, _}, node)
   end

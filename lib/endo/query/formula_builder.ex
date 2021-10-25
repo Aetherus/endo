@@ -111,6 +111,31 @@ defmodule Endo.Query.FormulaBuilder do
     {formula, args}
   end
 
+  def build_formula({{agg_type, fragment}, fragment_args}, alias_prefix, aliases_count, args) when agg_type in [:agg, :non_agg] do
+    # Risk SQL inject for flexibility.
+
+    {fragment_clause, remaining_fragment_args, args} =
+      fragment
+      |> safe!()
+      |> String.graphemes()
+      |> Enum.reduce({[], fragment_args, args}, fn
+        "?", {acc, [fragment_arg | rest_fragment_args], args} ->
+          {subformula, args} = build_formula(fragment_arg, alias_prefix, aliases_count, args)
+          {[acc, subformula], rest_fragment_args, args}
+        "?", {_acc, [], _args} ->
+          raise ArgumentError, "The number of question marks should be equal to the number of arguments."
+        char, {acc, fragment_args, args} ->
+          {[acc, char], fragment_args, args}
+      end)
+
+    case remaining_fragment_args do
+      [_ | _] ->
+        raise ArgumentError, "The number of question marks should be equal to the number of arguments."
+      [] ->
+        {IO.iodata_to_binary(fragment_clause), args}
+    end
+  end
+
   defp next_placeholder([]), do: "$1"
   defp next_placeholder([{"$" <> n, _} | _]) do
     n = String.to_integer(n)

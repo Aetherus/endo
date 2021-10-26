@@ -40,7 +40,7 @@ FROM
 regions = ["East", "West"]
 
 from("Superstore Orders")
-|> select([q], q["Product Name"], q["Sales"])
+|> select([q], [q["Product Name"], q["Sales"]])
 |> where([q], q["Region"] in ^regions)
 |> to_sql(schema: "data")
 ```
@@ -61,7 +61,7 @@ WHERE "t0"."Region" = $1
 
 ```elixir
 from("Superstore Orders")
-|> select([q], q["Product Name"], q["Sales"])
+|> select([q], [q["Product Name"], q["Sales"]])
 |> order_by([q],
   desc: q["Profit"],
   asc: q["Region"]
@@ -90,10 +90,10 @@ OFFSET 20
 
 ```elixir
 from("Superstore Orders")
-|> select([q],
+|> select([q], [
   q["Product Name"],
   agg("percentile_cont (?) WITHIN GROUP (ORDER BY ?)", 0.95, q["Profit"])
-)
+])
 |> group_by([q], q["Product Name"])
 |> having([q], agg("avg(?)", q["Sales"]) > 10_000)
 |> to_sql(schema: "data")

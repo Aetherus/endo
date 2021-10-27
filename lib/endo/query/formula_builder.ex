@@ -35,6 +35,10 @@ defmodule Endo.Query.FormulaBuilder do
   end
 
   # Dynamics
+  def build_formula({{_, :dynamic}, fun}, alias_prefix, aliases_count, args) when is_function(fun, 3) do
+    fun.(alias_prefix, aliases_count, args)
+  end
+
   def build_formula({:unsafe, {{_, :dynamic}, fun}}, alias_prefix, aliases_count, args) when is_function(fun, 3) do
     fun.(alias_prefix, aliases_count, args)
   end

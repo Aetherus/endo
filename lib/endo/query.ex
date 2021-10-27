@@ -16,7 +16,7 @@ defmodule Endo.Query do
     order_by: %{optional(pos_integer()) => [ast() | [ast()]]},
     limit: nil | non_neg_integer() | {:unsafe, non_neg_integer()},
     offset: nil | non_neg_integer() | {:unsafe, non_neg_integer()},
-    group_by: {pos_integer(), ast()},
+    group_by: {pos_integer(), [ast()]},
     having: {pos_integer(), ast()},
     join: %{optional(pos_integer()) => {qual(), {String.t() | t() | {:unsafe, t()}, ast()}}},
     aliases_count: non_neg_integer(),

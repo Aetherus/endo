@@ -151,6 +151,8 @@ defmodule Endo.Query.SQLBuilder do
   defp build_group_by_clause({aliases_count, group_by}, _schema, alias_prefix, args, _opts) do
     {group_by, args} =
       group_by
+      |> Enum.map(&safe!/1)
+      |> List.flatten()
       |> Enum.reduce({[], args}, fn grouping, {acc, args} ->
         {grouping, args} = build_formula(grouping, alias_prefix, aliases_count, args)
         {[grouping | acc], args}

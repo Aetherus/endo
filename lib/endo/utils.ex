@@ -3,6 +3,7 @@ defmodule Endo.Utils do
     escaped =
       string
       |> String.replace("\"", "\"\"", global: true)
+
     ~s["#{escaped}"]
   end
 
